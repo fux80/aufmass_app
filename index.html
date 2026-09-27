@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Profi Aufmaß Pro - Projekte</title>
+    <title>Profi Aufmaß Pro - Zoom & Pan</title>
     
     <link rel="manifest" href="manifest.json">
     <script>
@@ -29,7 +29,6 @@
         .view-section { display: none; flex: 1; flex-direction: column; overflow: hidden; }
         .view-section.active { display: flex; }
 
-        /* Projekt-Dashboard */
         .dashboard-container { padding: 24px; max-width: 800px; margin: 0 auto; width: 100%; overflow-y: auto; flex: 1; }
         .dashboard-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
         .project-card { background: #1e1e2d; border: 1px solid #33334d; border-radius: 10px; padding: 16px; margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center; cursor: pointer; transition: border-color 0.2s; }
@@ -37,7 +36,6 @@
         .project-info h3 { color: #00d2ff; font-size: 1rem; margin-bottom: 4px; }
         .project-info p { font-size: 0.8rem; color: #aaa; }
 
-        /* Projekt-Leiste (Blätter) */
         .project-bar { background: #181824; padding: 8px 12px; display: flex; align-items: center; gap: 8px; border-bottom: 1px solid #33334d; overflow-x: auto; z-index: 40; white-space: nowrap; }
         .sheet-tab { background: #2a2a3d; color: #aaa; padding: 6px 12px; border-radius: 6px; font-size: 0.8rem; font-weight: bold; cursor: pointer; display: flex; align-items: center; gap: 6px; border: 1px solid transparent; }
         .sheet-tab.active { background: #1e1e2d; color: #00d2ff; border-color: #00d2ff; }
@@ -47,6 +45,8 @@
         main { flex: 1; display: flex; flex-direction: column; position: relative; }
         #canvas-container { flex: 1; position: relative; background: #0a0a0f; overflow: hidden; }
         canvas { width: 100%; height: 100%; display: block; cursor: crosshair; touch-action: none; position: absolute; top: 0; left: 0; z-index: 1; }
+        canvas.pan-cursor { cursor: grab !important; }
+        canvas.pan-active { cursor: grabbing !important; }
         
         #labels-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 10; pointer-events: none; }
 
@@ -75,8 +75,8 @@
             cursor: pointer;
         }
 
-        .toolbar { background: #1e1e2d; padding: 10px; display: flex; gap: 8px; border-top: 1px solid #33334d; justify-content: center; flex-wrap: wrap; z-index: 30; }
-        .btn { background: #3a3a52; color: #fff; border: none; padding: 10px 14px; border-radius: 6px; font-weight: bold; font-size: 0.85rem; cursor: pointer; }
+        .toolbar { background: #1e1e2d; padding: 10px; display: flex; gap: 6px; border-top: 1px solid #33334d; justify-content: center; flex-wrap: wrap; z-index: 30; }
+        .btn { background: #3a3a52; color: #fff; border: none; padding: 10px 12px; border-radius: 6px; font-weight: bold; font-size: 0.85rem; cursor: pointer; }
         .btn.active { background: #00d2ff; color: #000; }
         .btn-success { background: #2ed573; color: #000; }
         .btn-delete-active { background: #ff4757 !important; color: #fff !important; }
@@ -91,15 +91,8 @@
         .measure-row.selected-row { border-color: #00d2ff; background: rgba(0, 210, 255, 0.05); }
         
         input[type="number"], input[type="text"] { 
-            flex: 1; 
-            padding: 8px; 
-            background: #121218; 
-            border: 1px solid #33334d; 
-            border-radius: 6px; 
-            color: #fff; 
-            font-size: 1rem; 
-            -webkit-user-select: auto;
-            user-select: auto;
+            flex: 1; padding: 8px; background: #121218; border: 1px solid #33334d; border-radius: 6px; color: #fff; font-size: 1rem; 
+            -webkit-user-select: auto; user-select: auto;
         }
 
         .mode-select-group { display: flex; gap: 6px; margin-top: 10px; }
@@ -114,19 +107,19 @@
 </head>
 <body>
 
+    <!-- Dashboard Ansicht -->
     <div id="dashboardView" class="view-section active">
         <header>
             <h1>Profi Aufmaß Pro - Projekte</h1>
             <button class="btn btn-success" onclick="openNewProjectModal()">➕ Neues Projekt</button>
         </header>
         <div class="dashboard-container">
-            <div class="dashboard-header">
-                <h2>Deine Bauvorhaben</h2>
-            </div>
+            <div class="dashboard-header"><h2>Deine Bauvorhaben</h2></div>
             <div id="projectListContainer"></div>
         </div>
     </div>
 
+    <!-- Editor Ansicht -->
     <div id="editorView" class="view-section">
         <header>
             <div style="display: flex; align-items: center; gap: 10px;">
@@ -150,6 +143,7 @@
             <div class="toolbar">
                 <button class="btn active" id="toolWall" onclick="setMode('wall')">🧱 Wand</button>
                 <button class="btn" id="toolArrow" onclick="setMode('arrow')">↔️ Pfeil</button>
+                <button class="btn" id="toolPan" onclick="setMode('pan')">✋ Hand / Zoom</button>
                 <button class="btn" id="toolText" onclick="setMode('text')">✏️ Notiz</button>
                 <button class="btn" id="toolDelete" onclick="setMode('delete')">🗑️ Löschen</button>
                 <button class="btn" onclick="document.getElementById('imgInput').click()">📷 Foto</button>
@@ -158,27 +152,24 @@
         </main>
     </div>
 
+    <!-- Modals -->
     <div class="modal" id="measureModal">
         <div class="card">
             <div style="display: flex; justify-content: space-between; align-items: center;">
                 <h2 id="modalTitle">Maß erfassen</h2>
                 <button class="btn active" onclick="addMeasureRow()" style="padding: 6px 12px;">➕ Feld</button>
             </div>
-            
             <div class="measure-list" id="measureListContainer"></div>
-
             <div class="mode-select-group">
                 <div class="mode-select-btn active" id="modeMin" onclick="setMeasureSelectionMode('min')">📉 Kleinstes Maß</div>
                 <div class="mode-select-btn" id="modeMax" onclick="setMeasureSelectionMode('max')">📈 Größtes Maß</div>
                 <div class="mode-select-btn" id="modeManual" onclick="setMeasureSelectionMode('manual')">🎯 Manuell wählen</div>
             </div>
-
             <div class="result-box">
                 <div class="result-title">Übertragenes Maß</div>
                 <div class="result-value" id="minResult">--- mm</div>
                 <div class="result-warning" id="diffWarning"></div>
             </div>
-
             <div style="display:flex; gap:8px; margin-top:12px;">
                 <button class="btn" style="flex:1" onclick="closeModal('measureModal')">Abbrechen</button>
                 <button class="btn active" style="flex:1" onclick="saveMeasurement()">Übernehmen</button>
@@ -189,9 +180,7 @@
     <div class="modal" id="textModal">
         <div class="card">
             <h2>Notiz / Text einfügen</h2>
-            <div style="margin:16px 0;">
-                <input type="text" id="noteInput" placeholder="z. B. Steckdose, Riss, H=2100">
-            </div>
+            <div style="margin:16px 0;"><input type="text" id="noteInput" placeholder="z. B. Steckdose, Riss, H=2100"></div>
             <div style="display:flex; gap:8px;">
                 <button class="btn" style="flex:1" onclick="closeModal('textModal')">Abbrechen</button>
                 <button class="btn active" style="flex:1" onclick="saveTextNote()">Platzieren</button>
@@ -202,9 +191,7 @@
     <div class="modal" id="newSheetModal">
         <div class="card">
             <h2>Neues Aufmaßblatt</h2>
-            <div style="margin:16px 0;">
-                <input type="text" id="newSheetNameInput" placeholder="z. B. Küche, Bad">
-            </div>
+            <div style="margin:16px 0;"><input type="text" id="newSheetNameInput" placeholder="z. B. Küche, Bad"></div>
             <div style="display:flex; gap:8px;">
                 <button class="btn" style="flex:1" onclick="closeModal('newSheetModal')">Abbrechen</button>
                 <button class="btn active" style="flex:1" onclick="createSheet()">Erstellen</button>
@@ -215,9 +202,7 @@
     <div class="modal" id="newProjectModal">
         <div class="card">
             <h2>Neues Projekt anlegen</h2>
-            <div style="margin:16px 0;">
-                <input type="text" id="newProjectNameInput" placeholder="z. B. Projekt Meier">
-            </div>
+            <div style="margin:16px 0;"><input type="text" id="newProjectNameInput" placeholder="z. B. Projekt Meier"></div>
             <div style="display:flex; gap:8px;">
                 <button class="btn" style="flex:1" onclick="closeModal('newProjectModal')">Abbrechen</button>
                 <button class="btn active" style="flex:1" onclick="createProject()">Erstellen</button>
@@ -232,8 +217,14 @@
         const SCALE = 0.1;
 
         let mode = 'wall'; 
-        let selectionMode = 'min'; // 'min', 'max', 'manual'
+        let selectionMode = 'min';
         let manualSelectedIndex = 0;
+
+        // Zoom & Pan Variablen
+        let panX = 0, panY = 0;
+        let zoom = 1.0;
+        let isPanning = false;
+        let panStart = { x: 0, y: 0 };
         
         let appData = {
             activeProjectId: null,
@@ -279,9 +270,7 @@
 
         function loadAppData() {
             const saved = localStorage.getItem('aufmass_app_data');
-            if (saved) {
-                try { appData = JSON.parse(saved); } catch(e) {}
-            }
+            if (saved) { try { appData = JSON.parse(saved); } catch(e) {} }
             renderDashboard();
         }
 
@@ -330,10 +319,7 @@
             const name = document.getElementById('newProjectNameInput').value.trim();
             if (!name) return;
             const newProj = {
-                id: Date.now(),
-                name: name,
-                createdAt: new Date().toLocaleDateString(),
-                activeSheetId: Date.now() + 1,
+                id: Date.now(), name: name, createdAt: new Date().toLocaleDateString(), activeSheetId: Date.now() + 1,
                 sheets: [{ id: Date.now() + 1, name: "1. Blatt", walls: [], arrows: [], textNotes: [], photos: [] }]
             };
             appData.projects.push(newProj);
@@ -430,12 +416,15 @@
             document.body.classList.toggle('delete-mode', mode === 'delete');
             document.getElementById('toolWall').classList.toggle('active', mode === 'wall');
             document.getElementById('toolArrow').classList.toggle('active', mode === 'arrow');
+            document.getElementById('toolPan').classList.toggle('active', mode === 'pan');
             document.getElementById('toolText').classList.toggle('active', mode === 'text');
             document.getElementById('toolDelete').classList.toggle('btn-delete-active', mode === 'delete');
+
+            canvas.classList.toggle('pan-cursor', mode === 'pan');
         }
 
         function resetState() {
-            isDrawing = false; isDraggingPhoto = false; isResizingPhoto = false;
+            isDrawing = false; isDraggingPhoto = false; isResizingPhoto = false; isPanning = false;
             activePhoto = null; activeArrowHandle = null; activeCornerHandle = null; activeTextHandle = null;
             currentStart = null; currentEnd = null; lastWallEnd = null;
             redraw(); updateLabels();
@@ -448,11 +437,15 @@
         }
         window.addEventListener('resize', resizeCanvas);
 
+        // Koordinaten mit Berücksichtigung von Zoom und Pan umrechnen
         function getPos(e) {
             const rect = canvas.getBoundingClientRect();
             let clientX = e.touches ? e.touches[0].clientX : e.clientX;
             let clientY = e.touches ? e.touches[0].clientY : e.clientY;
-            return { x: clientX - rect.left, y: clientY - rect.top };
+            return {
+                x: (clientX - rect.left - panX) / zoom,
+                y: (clientY - rect.top - panY) / zoom
+            };
         }
 
         function addPhotoLayer(e) {
@@ -483,6 +476,15 @@
 
         function handlePointerDown(e) {
             if (e.target.closest('#labels-layer')) return;
+
+            // Pan-Modus: Canvas verschieben starten
+            if (mode === 'pan') {
+                isPanning = true;
+                panStart = { x: (e.touches ? e.touches[0].clientX : e.clientX) - panX, y: (e.touches ? e.touches[0].clientY : e.clientY) - panY };
+                canvas.classList.add('pan-active');
+                return;
+            }
+
             let pos = getPos(e);
             currentPointerPos = pos;
 
@@ -533,9 +535,18 @@
         }
 
         function handlePointerMove(e) {
+            if (isPanning) {
+                let clientX = e.touches ? e.touches[0].clientX : e.clientX;
+                let clientY = e.touches ? e.touches[0].clientY : e.clientY;
+                panX = clientX - panStart.x;
+                panY = clientY - panStart.y;
+                redraw();
+                return;
+            }
+
             let pos = getPos(e);
             currentPointerPos = pos;
-            if (mode === 'delete') return;
+            if (mode === 'delete' || mode === 'pan') return;
 
             if (activeTextHandle !== null) {
                 textNotes[activeTextHandle].x = pos.x; textNotes[activeTextHandle].y = pos.y;
@@ -571,6 +582,12 @@
         }
 
         function handlePointerUp() {
+            if (isPanning) {
+                isPanning = false;
+                canvas.classList.remove('pan-active');
+                return;
+            }
+
             if (activeArrowHandle || activeCornerHandle || activeTextHandle !== null) {
                 activeArrowHandle = null; activeCornerHandle = null; activeTextHandle = null; saveAppData(); redraw(); return;
             }
@@ -591,6 +608,25 @@
             }
             currentStart = null; currentEnd = null; redraw();
         }
+
+        // Mausrad-Zoom
+        canvas.addEventListener('wheel', (e) => {
+            e.preventDefault();
+            const zoomFactor = 1.1;
+            const rect = canvas.getBoundingClientRect();
+            const mouseX = e.clientX - rect.left;
+            const mouseY = e.clientY - rect.top;
+
+            let newZoom = e.deltaY < 0 ? zoom * zoomFactor : zoom / zoomFactor;
+            newZoom = Math.max(0.4, Math.min(5.0, newZoom)); // Begrenzung 40% bis 500%
+
+            panX = mouseX - (mouseX - panX) * (newZoom / zoom);
+            panY = mouseY - (mouseY - panY) * (newZoom / zoom);
+            zoom = newZoom;
+
+            redraw();
+            updateLabels();
+        }, { passive: false });
 
         function saveTextNote() {
             let val = document.getElementById('noteInput').value.trim();
@@ -626,13 +662,19 @@
 
         function redraw() {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
-            ctx.strokeStyle = '#1e1e2d'; ctx.lineWidth = 1;
-            for(let x=0; x<canvas.width; x+=30) { ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,canvas.height); ctx.stroke(); }
-            for(let y=0; y<canvas.height; y+=30) { ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(canvas.width,y); ctx.stroke(); }
+            
+            ctx.save();
+            ctx.translate(panX, panY);
+            ctx.scale(zoom, zoom);
+
+            // Raster zeichnen
+            ctx.strokeStyle = '#1e1e2d'; ctx.lineWidth = 1 / zoom;
+            for(let x=-2000; x<4000; x+=30) { ctx.beginPath(); ctx.moveTo(x,-2000); ctx.lineTo(x,4000); ctx.stroke(); }
+            for(let y=-2000; y<4000; y+=30) { ctx.beginPath(); ctx.moveTo(-2000,y); ctx.lineTo(4000,y); ctx.stroke(); }
 
             photos.forEach(p => {
                 ctx.drawImage(p.img, p.x, p.y, p.w, p.h);
-                ctx.strokeStyle = '#00d2ff'; ctx.lineWidth = 1.5; ctx.strokeRect(p.x, p.y, p.w, p.h);
+                ctx.strokeStyle = '#00d2ff'; ctx.lineWidth = 1.5 / zoom; ctx.strokeRect(p.x, p.y, p.w, p.h);
             });
 
             walls.forEach(w => {
@@ -644,6 +686,9 @@
             drawRightAngleSymbols();
 
             if ((activeArrowHandle || activeCornerHandle) && currentPointerPos) drawMagnifier(currentPointerPos);
+            
+            ctx.restore();
+            updateLabels();
         }
 
         function drawDoubleArrow(p1, p2) {
@@ -659,7 +704,6 @@
             ctx.fillStyle = '#ff4757'; ctx.fill();
         }
 
-        // Rechte-Winkel Symbole (90°)
         function drawRightAngleSymbols() {
             for (let i = 0; i < walls.length; i++) {
                 for (let j = i + 1; j < walls.length; j++) {
@@ -687,7 +731,7 @@
                                 ctx.moveTo(vertex.x + uA.x, vertex.y + uA.y);
                                 ctx.lineTo(vertex.x + uA.x + uB.x, vertex.y + uA.y + uB.y);
                                 ctx.lineTo(vertex.x + uB.x, vertex.y + uB.y);
-                                ctx.strokeStyle = '#00d2ff'; ctx.lineWidth = 1.5; ctx.stroke();
+                                ctx.strokeStyle = '#00d2ff'; ctx.lineWidth = 1.5 / zoom; ctx.stroke();
                             }
                         }
                     }
@@ -696,15 +740,20 @@
         }
 
         function drawMagnifier(targetPos) {
-            const zoom = 2.5, size = 120, radius = size / 2;
-            let magX = targetPos.x, magY = targetPos.y - 100;
-            if (magY - radius < 10) magY = targetPos.y + 100;
+            // Lupe bleibt stabil
+            const zoomVal = 2.5, size = 120, radius = size / 2;
+            let magX = targetPos.x * zoom + panX, magY = (targetPos.y * zoom + panY) - 100;
+            if (magY - radius < 10) magY = (targetPos.y * zoom + panY) + 100;
             if (magX - radius < 10) magX = radius + 10;
             if (magX + radius > canvas.width - 10) magX = canvas.width - radius - 10;
 
-            ctx.save(); ctx.beginPath(); ctx.arc(magX, magY, radius, 0, Math.PI * 2); ctx.clip();
+            ctx.save();
+            ctx.beginPath(); ctx.arc(magX, magY, radius, 0, Math.PI * 2); ctx.clip();
             ctx.fillStyle = '#0a0a0f'; ctx.fillRect(magX - radius, magY - radius, size, size);
-            ctx.translate(magX, magY); ctx.scale(zoom, zoom); ctx.translate(-targetPos.x, -targetPos.y);
+
+            ctx.translate(magX, magY);
+            ctx.scale(zoomVal, zoomVal);
+            ctx.translate(-targetPos.x, -targetPos.y);
 
             photos.forEach(p => ctx.drawImage(p.img, p.x, p.y, p.w, p.h));
             walls.forEach(w => { ctx.beginPath(); ctx.moveTo(w.p1.x, w.p1.y); ctx.lineTo(w.p2.x, w.p2.y); ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 5; ctx.stroke(); });
@@ -714,25 +763,32 @@
             ctx.beginPath(); ctx.arc(magX, magY, radius, 0, Math.PI * 2); ctx.strokeStyle = '#00d2ff'; ctx.lineWidth = 3; ctx.stroke();
         }
 
+        // Labels positionieren sich exakt passend zum Zoom und Pan
         function updateLabels() {
             labelsLayer.innerHTML = '';
             walls.forEach((w, idx) => {
+                let midX = ((w.p1.x + w.p2.x) / 2) * zoom + panX;
+                let midY = ((w.p1.y + w.p2.y) / 2) * zoom + panY;
                 let lbl = document.createElement('div'); lbl.className = 'wall-label';
-                lbl.style.left = `${(w.p1.x + w.p2.x) / 2}px`; lbl.style.top = `${(w.p1.y + w.p2.y) / 2}px`;
+                lbl.style.left = `${midX}px`; lbl.style.top = `${midY}px`;
                 lbl.innerText = w.length ? `${w.length} mm` : `W${idx + 1}`;
                 lbl.onclick = (e) => { e.stopPropagation(); handleLabelClick('wall', idx); };
                 labelsLayer.appendChild(lbl);
             });
             arrows.forEach((a, idx) => {
+                let midX = ((a.p1.x + a.p2.x) / 2) * zoom + panX;
+                let midY = ((a.p1.y + a.p2.y) / 2) * zoom + panY;
                 let lbl = document.createElement('div'); lbl.className = 'arrow-label';
-                lbl.style.left = `${(a.p1.x + a.p2.x) / 2}px`; lbl.style.top = `${(a.p1.y + a.p2.y) / 2}px`;
+                lbl.style.left = `${midX}px`; lbl.style.top = `${midY}px`;
                 lbl.innerText = a.length ? `${a.length} mm` : `Pfeil ${idx + 1}`;
                 lbl.onclick = (e) => { e.stopPropagation(); handleLabelClick('arrow', idx); };
                 labelsLayer.appendChild(lbl);
             });
             textNotes.forEach((t, idx) => {
+                let posX = t.x * zoom + panX;
+                let posY = t.y * zoom + panY;
                 let lbl = document.createElement('div'); lbl.className = 'text-label';
-                lbl.style.left = `${t.x}px`; lbl.style.top = `${t.y}px`; lbl.innerText = t.text;
+                lbl.style.left = `${posX}px`; lbl.style.top = `${posY}px`; lbl.innerText = t.text;
                 lbl.onclick = (e) => { e.stopPropagation(); handleLabelClick('text', idx); };
                 labelsLayer.appendChild(lbl);
             });
@@ -762,7 +818,6 @@
             selectedTarget = { type, index };
             let item = type === 'wall' ? walls[index] : arrows[index];
             document.getElementById('modalTitle').innerText = `${type === 'wall' ? 'Wand ' + (index + 1) : 'Pfeil ' + (index + 1)} vermessen`;
-            
             selectionMode = item.selectionMode || 'min';
             manualSelectedIndex = item.manualSelectedIndex || 0;
             updateSelectionModeUI();
@@ -793,7 +848,7 @@
             row.className = `measure-row ${isSelected ? 'selected-row' : ''}`;
             row.innerHTML = `
                 <input type="number" class="m-val" placeholder="Messung (mm)" value="${val}" oninput="calculateResult()">
-                <button class="btn" style="padding: 6px 10px; background: #2a2a3d; font-size:0.75rem;" onclick="selectManualRow(${idx})">Auswählen</button>
+                <button class="btn" style="padding: 6px 10px; background: #2a2a3d; font-size:0.75rem;" onclick="selectManualRow(${idx})">Wählen</button>
                 <button class="btn btn-danger" style="padding: 8px 10px;" onclick="removeMeasureRow(this)">✕</button>
             `;
             container.appendChild(row);
@@ -812,10 +867,7 @@
 
         function removeMeasureRow(btn) {
             let container = document.getElementById('measureListContainer');
-            if (container.children.length > 1) {
-                btn.parentElement.remove();
-                calculateResult();
-            }
+            if (container.children.length > 1) { btn.parentElement.remove(); calculateResult(); }
         }
 
         function calculateResult() {
