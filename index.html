@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Profi Aufmaß PWA</title>
+    <title>Profi Aufmaß Pro - Projekte</title>
     
     <link rel="manifest" href="manifest.json">
     <script>
@@ -23,26 +23,48 @@
             -webkit-touch-callout: none;
         }
         body { background: #121218; color: #f0f0f0; display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
-        header { background: #1e1e2d; padding: 12px 16px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #33334d; }
+        header { background: #1e1e2d; padding: 12px 16px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #33334d; z-index: 50; }
         h1 { font-size: 1.1rem; color: #00d2ff; }
-        
+
+        .view-section { display: none; flex: 1; flex-direction: column; overflow: hidden; }
+        .view-section.active { display: flex; }
+
+        /* Projekt-Dashboard */
+        .dashboard-container { padding: 24px; max-width: 800px; margin: 0 auto; width: 100%; overflow-y: auto; flex: 1; }
+        .dashboard-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+        .project-card { background: #1e1e2d; border: 1px solid #33334d; border-radius: 10px; padding: 16px; margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center; cursor: pointer; transition: border-color 0.2s; }
+        .project-card:hover { border-color: #00d2ff; }
+        .project-info h3 { color: #00d2ff; font-size: 1rem; margin-bottom: 4px; }
+        .project-info p { font-size: 0.8rem; color: #aaa; }
+
+        /* Projekt-Leiste (Blätter) */
+        .project-bar { background: #181824; padding: 8px 12px; display: flex; align-items: center; gap: 8px; border-bottom: 1px solid #33334d; overflow-x: auto; z-index: 40; white-space: nowrap; }
+        .sheet-tab { background: #2a2a3d; color: #aaa; padding: 6px 12px; border-radius: 6px; font-size: 0.8rem; font-weight: bold; cursor: pointer; display: flex; align-items: center; gap: 6px; border: 1px solid transparent; }
+        .sheet-tab.active { background: #1e1e2d; color: #00d2ff; border-color: #00d2ff; }
+        .sheet-tab .del-sheet { color: #ff4757; font-size: 0.75rem; padding: 2px 4px; border-radius: 4px; }
+        .sheet-tab .del-sheet:hover { background: rgba(255,71,87,0.2); }
+
         main { flex: 1; display: flex; flex-direction: column; position: relative; }
         #canvas-container { flex: 1; position: relative; background: #0a0a0f; overflow: hidden; }
-        canvas { width: 100%; height: 100%; display: block; cursor: crosshair; touch-action: none; }
+        canvas { width: 100%; height: 100%; display: block; cursor: crosshair; touch-action: none; position: absolute; top: 0; left: 0; z-index: 1; }
+        
+        #labels-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 10; pointer-events: none; }
 
         .wall-label, .arrow-label, .text-label {
             position: absolute;
             transform: translate(-50%, -50%);
-            padding: 2px 6px;
-            border-radius: 4px;
-            font-size: 0.75rem;
+            padding: 6px 10px;
+            border-radius: 6px;
+            font-size: 0.8rem;
             font-weight: bold;
             cursor: pointer;
-            box-shadow: 0 4px 10px rgba(0,0,0,0.5);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.6);
             white-space: nowrap;
-            z-index: 10;
+            pointer-events: auto !important;
+            touch-action: manipulation;
+            user-select: auto;
         }
-        .wall-label { background: #1e1e2d; border: 1px solid #00d2ff; color: #00d2ff; }
+        .wall-label { background: #1e1e2d; border: 1.5px solid #00d2ff; color: #00d2ff; }
         .arrow-label { background: #ff4757; color: #fff; }
         .text-label { background: #2ed573; color: #000; }
 
@@ -53,7 +75,7 @@
             cursor: pointer;
         }
 
-        .toolbar { background: #1e1e2d; padding: 10px; display: flex; gap: 8px; border-top: 1px solid #33334d; justify-content: center; flex-wrap: wrap; z-index: 20; }
+        .toolbar { background: #1e1e2d; padding: 10px; display: flex; gap: 8px; border-top: 1px solid #33334d; justify-content: center; flex-wrap: wrap; z-index: 30; }
         .btn { background: #3a3a52; color: #fff; border: none; padding: 10px 14px; border-radius: 6px; font-weight: bold; font-size: 0.85rem; cursor: pointer; }
         .btn.active { background: #00d2ff; color: #000; }
         .btn-success { background: #2ed573; color: #000; }
@@ -62,13 +84,15 @@
 
         .modal { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.8); display: none; justify-content: center; align-items: flex-end; z-index: 100; }
         .modal.active { display: flex; }
-        .card { background: #1e1e2d; width: 100%; max-width: 480px; padding: 20px; border-radius: 16px 16px 0 0; border-top: 2px solid #00d2ff; }
+        .card { background: #1e1e2d; width: 100%; max-width: 480px; padding: 20px; border-radius: 16px 16px 0 0; border-top: 2px solid #00d2ff; max-height: 85vh; display: flex; flex-direction: column; }
         
-        .measure-list { display: flex; flex-direction: column; gap: 8px; margin: 12px 0; }
-        .measure-row { display: flex; gap: 8px; align-items: center; }
+        .measure-list { display: flex; flex-direction: column; gap: 8px; margin: 12px 0; overflow-y: auto; max-height: 35vh; }
+        .measure-row { display: flex; gap: 8px; align-items: center; background: #181822; padding: 6px; border-radius: 6px; border: 1px solid #33334d; }
+        .measure-row.selected-row { border-color: #00d2ff; background: rgba(0, 210, 255, 0.05); }
+        
         input[type="number"], input[type="text"] { 
             flex: 1; 
-            padding: 10px; 
+            padding: 8px; 
             background: #121218; 
             border: 1px solid #33334d; 
             border-radius: 6px; 
@@ -78,66 +102,93 @@
             user-select: auto;
         }
 
-        .result-box { background: rgba(0, 210, 255, 0.1); border: 1px solid #00d2ff; padding: 12px; border-radius: 8px; margin-top: 12px; }
-        .result-title { font-size: 0.8rem; color: #aaa; text-transform: uppercase; }
-        .result-value { font-size: 1.4rem; font-weight: bold; color: #00d2ff; }
-        .result-warning { font-size: 0.85rem; color: #ffa502; margin-top: 4px; }
+        .mode-select-group { display: flex; gap: 6px; margin-top: 10px; }
+        .mode-select-btn { flex: 1; background: #2a2a3d; color: #aaa; border: 1px solid #33334d; padding: 8px; border-radius: 6px; font-size: 0.75rem; font-weight: bold; cursor: pointer; text-align: center; }
+        .mode-select-btn.active { background: #00d2ff; color: #000; border-color: #00d2ff; }
+
+        .result-box { background: rgba(0, 210, 255, 0.1); border: 1px solid #00d2ff; padding: 10px; border-radius: 8px; margin-top: 10px; }
+        .result-title { font-size: 0.75rem; color: #aaa; text-transform: uppercase; }
+        .result-value { font-size: 1.3rem; font-weight: bold; color: #00d2ff; }
+        .result-warning { font-size: 0.8rem; color: #ffa502; margin-top: 4px; }
     </style>
 </head>
 <body>
 
-    <header>
-        <h1>Aufmaß Pro 4.6</h1>
-        <div>
-            <button class="btn btn-success" onclick="exportPDF()">📄 PDF Export</button>
-            <button class="btn btn-danger" onclick="confirmClearAll()">Neu</button>
+    <div id="dashboardView" class="view-section active">
+        <header>
+            <h1>Profi Aufmaß Pro - Projekte</h1>
+            <button class="btn btn-success" onclick="openNewProjectModal()">➕ Neues Projekt</button>
+        </header>
+        <div class="dashboard-container">
+            <div class="dashboard-header">
+                <h2>Deine Bauvorhaben</h2>
+            </div>
+            <div id="projectListContainer"></div>
         </div>
-    </header>
+    </div>
 
-    <main>
-        <div id="canvas-container">
-            <canvas id="paintCanvas"></canvas>
-            <div id="labels-layer"></div>
-        </div>
+    <div id="editorView" class="view-section">
+        <header>
+            <div style="display: flex; align-items: center; gap: 10px;">
+                <button class="btn" onclick="goToDashboard()" style="padding: 6px 10px;">🏠 Projekte</button>
+                <h1 id="activeProjectTitle">Projekt</h1>
+            </div>
+            <div>
+                <button class="btn btn-success" onclick="exportPDF()">📄 PDF Export</button>
+                <button class="btn btn-danger" onclick="confirmClearAll()">Blatt leeren</button>
+            </div>
+        </header>
 
-        <div class="toolbar">
-            <button class="btn active" id="toolWall" onclick="setMode('wall')">🧱 Wand</button>
-            <button class="btn" id="toolArrow" onclick="setMode('arrow')">↔️ Pfeil</button>
-            <button class="btn" id="toolText" onclick="setMode('text')">✏️ Notiz</button>
-            <button class="btn" id="toolDelete" onclick="setMode('delete')">🗑️ Löschen</button>
-            <button class="btn" onclick="document.getElementById('imgInput').click()">📷 Foto / Kamera</button>
-            <input type="file" id="imgInput" accept="image/*" capture="environment" style="display:none;" onchange="addPhotoLayer(event)">
-        </div>
-    </main>
+        <div class="project-bar" id="sheetTabsContainer"></div>
 
-    <!-- Modal für Multi-Messung -->
+        <main>
+            <div id="canvas-container">
+                <canvas id="paintCanvas"></canvas>
+                <div id="labels-layer"></div>
+            </div>
+
+            <div class="toolbar">
+                <button class="btn active" id="toolWall" onclick="setMode('wall')">🧱 Wand</button>
+                <button class="btn" id="toolArrow" onclick="setMode('arrow')">↔️ Pfeil</button>
+                <button class="btn" id="toolText" onclick="setMode('text')">✏️ Notiz</button>
+                <button class="btn" id="toolDelete" onclick="setMode('delete')">🗑️ Löschen</button>
+                <button class="btn" onclick="document.getElementById('imgInput').click()">📷 Foto</button>
+                <input type="file" id="imgInput" accept="image/*" capture="environment" style="display:none;" onchange="addPhotoLayer(event)">
+            </div>
+        </main>
+    </div>
+
     <div class="modal" id="measureModal">
         <div class="card">
-            <h2 id="modalTitle">Maß erfassen</h2>
-            <div class="measure-list">
-                <div class="measure-row"><input type="number" id="input1" class="m-val" placeholder="Messung 1 (mm)" oninput="calculateMin()"></div>
-                <div class="measure-row"><input type="number" class="m-val" placeholder="Messung 2 (mm)" oninput="calculateMin()"></div>
-                <div class="measure-row"><input type="number" class="m-val" placeholder="Messung 3 (mm)" oninput="calculateMin()"></div>
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+                <h2 id="modalTitle">Maß erfassen</h2>
+                <button class="btn active" onclick="addMeasureRow()" style="padding: 6px 12px;">➕ Feld</button>
+            </div>
+            
+            <div class="measure-list" id="measureListContainer"></div>
+
+            <div class="mode-select-group">
+                <div class="mode-select-btn active" id="modeMin" onclick="setMeasureSelectionMode('min')">📉 Kleinstes Maß</div>
+                <div class="mode-select-btn" id="modeMax" onclick="setMeasureSelectionMode('max')">📈 Größtes Maß</div>
+                <div class="mode-select-btn" id="modeManual" onclick="setMeasureSelectionMode('manual')">🎯 Manuell wählen</div>
             </div>
 
             <div class="result-box">
-                <div class="result-title">Übertragenes Maß (Minimum)</div>
+                <div class="result-title">Übertragenes Maß</div>
                 <div class="result-value" id="minResult">--- mm</div>
                 <div class="result-warning" id="diffWarning"></div>
             </div>
 
-            <div style="display:flex; gap:8px; margin-top:16px;">
+            <div style="display:flex; gap:8px; margin-top:12px;">
                 <button class="btn" style="flex:1" onclick="closeModal('measureModal')">Abbrechen</button>
                 <button class="btn active" style="flex:1" onclick="saveMeasurement()">Übernehmen</button>
             </div>
         </div>
     </div>
 
-    <!-- Modal für Notizen -->
     <div class="modal" id="textModal">
         <div class="card">
             <h2>Notiz / Text einfügen</h2>
-            <p style="font-size:0.8rem; color:#aaa; margin-top:4px;">Tippe einen Text ein.</p>
             <div style="margin:16px 0;">
                 <input type="text" id="noteInput" placeholder="z. B. Steckdose, Riss, H=2100">
             </div>
@@ -148,12 +199,61 @@
         </div>
     </div>
 
+    <div class="modal" id="newSheetModal">
+        <div class="card">
+            <h2>Neues Aufmaßblatt</h2>
+            <div style="margin:16px 0;">
+                <input type="text" id="newSheetNameInput" placeholder="z. B. Küche, Bad">
+            </div>
+            <div style="display:flex; gap:8px;">
+                <button class="btn" style="flex:1" onclick="closeModal('newSheetModal')">Abbrechen</button>
+                <button class="btn active" style="flex:1" onclick="createSheet()">Erstellen</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal" id="newProjectModal">
+        <div class="card">
+            <h2>Neues Projekt anlegen</h2>
+            <div style="margin:16px 0;">
+                <input type="text" id="newProjectNameInput" placeholder="z. B. Projekt Meier">
+            </div>
+            <div style="display:flex; gap:8px;">
+                <button class="btn" style="flex:1" onclick="closeModal('newProjectModal')">Abbrechen</button>
+                <button class="btn active" style="flex:1" onclick="createProject()">Erstellen</button>
+            </div>
+        </div>
+    </div>
+
     <script>
         const canvas = document.getElementById('paintCanvas');
         const ctx = canvas.getContext('2d');
         const labelsLayer = document.getElementById('labels-layer');
+        const SCALE = 0.1;
 
         let mode = 'wall'; 
+        let selectionMode = 'min'; // 'min', 'max', 'manual'
+        let manualSelectedIndex = 0;
+        
+        let appData = {
+            activeProjectId: null,
+            projects: [
+                {
+                    id: 1,
+                    name: "Projekt Meier",
+                    createdAt: "2026-09-27",
+                    activeSheetId: 101,
+                    sheets: [
+                        { id: 101, name: "Wohnzimmer", walls: [], arrows: [], textNotes: [], photos: [] },
+                        { id: 102, name: "Küche", walls: [], arrows: [], textNotes: [], photos: [] }
+                    ]
+                }
+            ]
+        };
+
+        let currentProject = null;
+        let currentSheet = null;
+
         let walls = [];          
         let arrows = [];
         let textNotes = [];
@@ -177,31 +277,168 @@
         let pendingTextPos = null;
         let selectedTarget = null;
 
+        function loadAppData() {
+            const saved = localStorage.getItem('aufmass_app_data');
+            if (saved) {
+                try { appData = JSON.parse(saved); } catch(e) {}
+            }
+            renderDashboard();
+        }
+
+        function saveAppData() {
+            if (currentProject && currentSheet) {
+                currentSheet.walls = walls;
+                currentSheet.arrows = arrows;
+                currentSheet.textNotes = textNotes;
+                currentSheet.photos = photos.map(p => ({ id: p.id, src: p.img.src, x: p.x, y: p.y, w: p.w, h: p.h }));
+            }
+            localStorage.setItem('aufmass_app_data', JSON.stringify(appData));
+        }
+
+        function goToDashboard() {
+            saveAppData();
+            document.getElementById('editorView').classList.remove('active');
+            document.getElementById('dashboardView').classList.add('active');
+            renderDashboard();
+        }
+
+        function renderDashboard() {
+            const container = document.getElementById('projectListContainer');
+            container.innerHTML = '';
+            appData.projects.forEach(proj => {
+                const card = document.createElement('div');
+                card.className = 'project-card';
+                card.innerHTML = `
+                    <div class="project-info">
+                        <h3>📁 ${proj.name}</h3>
+                        <p>${proj.sheets.length} Aufmaßblatt/-blätter</p>
+                    </div>
+                    <button class="btn active" style="padding: 6px 12px;">Öffnen</button>
+                `;
+                card.onclick = () => openProject(proj.id);
+                container.appendChild(card);
+            });
+        }
+
+        function openNewProjectModal() {
+            document.getElementById('newProjectNameInput').value = '';
+            document.getElementById('newProjectModal').classList.add('active');
+            setTimeout(() => document.getElementById('newProjectNameInput').focus(), 100);
+        }
+
+        function createProject() {
+            const name = document.getElementById('newProjectNameInput').value.trim();
+            if (!name) return;
+            const newProj = {
+                id: Date.now(),
+                name: name,
+                createdAt: new Date().toLocaleDateString(),
+                activeSheetId: Date.now() + 1,
+                sheets: [{ id: Date.now() + 1, name: "1. Blatt", walls: [], arrows: [], textNotes: [], photos: [] }]
+            };
+            appData.projects.push(newProj);
+            saveAppData();
+            closeModal('newProjectModal');
+            openProject(newProj.id);
+        }
+
+        function openProject(projectId) {
+            currentProject = appData.projects.find(p => p.id === projectId);
+            if (!currentProject) return;
+            appData.activeProjectId = projectId;
+            document.getElementById('activeProjectTitle').innerText = currentProject.name;
+            document.getElementById('dashboardView').classList.remove('active');
+            document.getElementById('editorView').classList.add('active');
+            switchSheet(currentProject.activeSheetId, false);
+            setTimeout(resizeCanvas, 50);
+        }
+
+        function switchSheet(sheetId, saveCurrent = true) {
+            if (saveCurrent) saveAppData();
+            currentProject.activeSheetId = sheetId;
+            currentSheet = currentProject.sheets.find(s => s.id === sheetId) || currentProject.sheets[0];
+            currentProject.activeSheetId = currentSheet.id;
+
+            walls = currentSheet.walls || [];
+            arrows = currentSheet.arrows || [];
+            textNotes = currentSheet.textNotes || [];
+            
+            photos = [];
+            if (currentSheet.photos) {
+                currentSheet.photos.forEach(pData => {
+                    const img = new Image();
+                    img.onload = () => { redraw(); updateLabels(); };
+                    img.src = pData.src;
+                    photos.push({ id: pData.id, img: img, x: pData.x, y: pData.y, w: pData.w, h: pData.h });
+                });
+            }
+            renderSheetTabs();
+            resetState();
+        }
+
+        function renderSheetTabs() {
+            const container = document.getElementById('sheetTabsContainer');
+            container.innerHTML = '';
+            currentProject.sheets.forEach(sheet => {
+                const tab = document.createElement('div');
+                tab.className = `sheet-tab ${sheet.id === currentSheet.id ? 'active' : ''}`;
+                tab.innerHTML = `📄 ${sheet.name}`;
+                tab.onclick = () => switchSheet(sheet.id);
+
+                if (currentProject.sheets.length > 1) {
+                    const delBtn = document.createElement('span');
+                    delBtn.className = 'del-sheet';
+                    delBtn.innerText = '✕';
+                    delBtn.onclick = (e) => { e.stopPropagation(); deleteSheet(sheet.id); };
+                    tab.appendChild(delBtn);
+                }
+                container.appendChild(tab);
+            });
+
+            const addBtn = document.createElement('div');
+            addBtn.className = 'sheet-tab';
+            addBtn.style.color = '#2ed573';
+            addBtn.innerHTML = '➕ Blatt';
+            addBtn.onclick = () => {
+                document.getElementById('newSheetNameInput').value = `Raum ${currentProject.sheets.length + 1}`;
+                document.getElementById('newSheetModal').classList.add('active');
+            };
+            container.appendChild(addBtn);
+        }
+
+        function createSheet() {
+            const name = document.getElementById('newSheetNameInput').value.trim();
+            if (!name) return;
+            saveAppData();
+            const newId = Date.now();
+            currentProject.sheets.push({ id: newId, name: name, walls: [], arrows: [], textNotes: [], photos: [] });
+            closeModal('newSheetModal');
+            switchSheet(newId, false);
+        }
+
+        function deleteSheet(sheetId) {
+            if (currentProject.sheets.length <= 1) return alert("Das letzte Blatt kann nicht gelöscht werden.");
+            if (confirm("Aufmaßblatt löschen?")) {
+                currentProject.sheets = currentProject.sheets.filter(s => s.id !== sheetId);
+                switchSheet(currentProject.sheets[0].id, false);
+            }
+        }
+
         function setMode(newMode) {
             resetState();
             mode = newMode;
             document.body.classList.toggle('delete-mode', mode === 'delete');
-
             document.getElementById('toolWall').classList.toggle('active', mode === 'wall');
             document.getElementById('toolArrow').classList.toggle('active', mode === 'arrow');
             document.getElementById('toolText').classList.toggle('active', mode === 'text');
-            
-            const delBtn = document.getElementById('toolDelete');
-            delBtn.classList.toggle('btn-delete-active', mode === 'delete');
+            document.getElementById('toolDelete').classList.toggle('btn-delete-active', mode === 'delete');
         }
 
         function resetState() {
-            isDrawing = false;
-            isDraggingPhoto = false;
-            isResizingPhoto = false;
-            activePhoto = null;
-            activeArrowHandle = null;
-            activeCornerHandle = null;
-            activeTextHandle = null;
-            currentStart = null;
-            currentEnd = null;
-            lastWallEnd = null;
-            redraw();
+            isDrawing = false; isDraggingPhoto = false; isResizingPhoto = false;
+            activePhoto = null; activeArrowHandle = null; activeCornerHandle = null; activeTextHandle = null;
+            currentStart = null; currentEnd = null; lastWallEnd = null;
+            redraw(); updateLabels();
         }
 
         function resizeCanvas() {
@@ -213,38 +450,21 @@
 
         function getPos(e) {
             const rect = canvas.getBoundingClientRect();
-            let clientX, clientY;
-            if (e.touches && e.touches.length > 0) {
-                clientX = e.touches[0].clientX;
-                clientY = e.touches[0].clientY;
-            } else {
-                clientX = e.clientX;
-                clientY = e.clientY;
-            }
+            let clientX = e.touches ? e.touches[0].clientX : e.clientX;
+            let clientY = e.touches ? e.touches[0].clientY : e.clientY;
             return { x: clientX - rect.left, y: clientY - rect.top };
         }
 
         function addPhotoLayer(e) {
             const file = e.target.files[0];
             if (!file) return;
-
             const reader = new FileReader();
             reader.onload = (event) => {
                 const img = new Image();
                 img.onload = () => {
-                    const aspect = img.width / img.height;
-                    const w = 260;
-                    const h = w / aspect;
-                    photos.push({
-                        id: Date.now(),
-                        img: img,
-                        x: Math.max(20, canvas.width / 2 - w / 2),
-                        y: Math.max(20, canvas.height / 2 - h / 2),
-                        w: w,
-                        h: h
-                    });
-                    redraw();
-                    updateLabels();
+                    let w = 260, h = w / (img.width / img.height);
+                    photos.push({ id: Date.now(), img: img, x: 50, y: 50, w: w, h: h });
+                    saveAppData(); redraw(); updateLabels();
                 };
                 img.src = event.target.result;
             };
@@ -254,19 +474,15 @@
 
         function findWallCornersAt(pos, threshold = 30) {
             let matches = [];
-            for (let i = 0; i < walls.length; i++) {
-                let w = walls[i];
-                if (Math.hypot(pos.x - w.p1.x, pos.y - w.p1.y) < threshold) {
-                    matches.push({ wallIndex: i, pointName: 'p1', pt: w.p1 });
-                }
-                if (Math.hypot(pos.x - w.p2.x, pos.y - w.p2.y) < threshold) {
-                    matches.push({ wallIndex: i, pointName: 'p2', pt: w.p2 });
-                }
-            }
+            walls.forEach((w, i) => {
+                if (Math.hypot(pos.x - w.p1.x, pos.y - w.p1.y) < threshold) matches.push({ wallIndex: i, pointName: 'p1', pt: w.p1 });
+                if (Math.hypot(pos.x - w.p2.x, pos.y - w.p2.y) < threshold) matches.push({ wallIndex: i, pointName: 'p2', pt: w.p2 });
+            });
             return matches;
         }
 
         function handlePointerDown(e) {
+            if (e.target.closest('#labels-layer')) return;
             let pos = getPos(e);
             currentPointerPos = pos;
 
@@ -274,10 +490,7 @@
                 for (let i = photos.length - 1; i >= 0; i--) {
                     let p = photos[i];
                     if (pos.x >= p.x && pos.x <= p.x + p.w && pos.y >= p.y && pos.y <= p.y + p.h) {
-                        photos.splice(i, 1);
-                        redraw();
-                        updateLabels();
-                        return;
+                        photos.splice(i, 1); saveAppData(); redraw(); updateLabels(); return;
                     }
                 }
                 return;
@@ -291,258 +504,107 @@
                 return;
             }
 
-            // 1. Notiz verschieben
             for (let i = textNotes.length - 1; i >= 0; i--) {
-                let t = textNotes[i];
-                if (Math.hypot(pos.x - t.x, pos.y - t.y) < 22) {
-                    activeTextHandle = i;
-                    return;
-                }
+                if (Math.hypot(pos.x - textNotes[i].x, pos.y - textNotes[i].y) < 22) { activeTextHandle = i; return; }
             }
 
-            // 2. Foto-Steuerung
             for (let i = photos.length - 1; i >= 0; i--) {
                 let p = photos[i];
-                if (Math.hypot(pos.x - (p.x + p.w), pos.y - (p.y + p.h)) < 25) {
-                    activePhoto = p;
-                    isResizingPhoto = true;
-                    return;
-                }
-                if (Math.hypot(pos.x - p.x, pos.y - p.y) < 25) {
-                    activePhoto = p;
-                    isDraggingPhoto = true;
-                    dragOffset = { x: pos.x - p.x, y: pos.y - p.y };
-                    return;
-                }
+                if (Math.hypot(pos.x - (p.x + p.w), pos.y - (p.y + p.h)) < 25) { activePhoto = p; isResizingPhoto = true; return; }
+                if (Math.hypot(pos.x - p.x, pos.y - p.y) < 25) { activePhoto = p; isDraggingPhoto = true; dragOffset = { x: pos.x - p.x, y: pos.y - p.y }; return; }
             }
 
-            // 3. Pfeil-Anpackpunkte
             for (let i = arrows.length - 1; i >= 0; i--) {
                 let a = arrows[i];
-                if (Math.hypot(pos.x - a.p1.x, pos.y - a.p1.y) < 20) {
-                    activeArrowHandle = { arrowIndex: i, pointName: 'p1' };
-                    redraw();
-                    return;
-                }
-                if (Math.hypot(pos.x - a.p2.x, pos.y - a.p2.y) < 20) {
-                    activeArrowHandle = { arrowIndex: i, pointName: 'p2' };
-                    redraw();
-                    return;
-                }
+                if (Math.hypot(pos.x - a.p1.x, pos.y - a.p1.y) < 20) { activeArrowHandle = { arrowIndex: i, pointName: 'p1' }; return; }
+                if (Math.hypot(pos.x - a.p2.x, pos.y - a.p2.y) < 20) { activeArrowHandle = { arrowIndex: i, pointName: 'p2' }; return; }
             }
 
-            // 4. Prüfen ob eine bestehende Ecke angeklickt wurde zum Verschieben
             let corners = findWallCornersAt(pos, 25);
             if (corners.length > 0 && mode === 'wall') {
-                // Nur wenn man nicht aktiv nahtlos an der letzten Wand ansetzt
-                if (!lastWallEnd || Math.hypot(pos.x - lastWallEnd.x, pos.y - lastWallEnd.y) > 30) {
-                    activeCornerHandle = corners;
-                    return;
-                }
+                if (!lastWallEnd || Math.hypot(pos.x - lastWallEnd.x, pos.y - lastWallEnd.y) > 30) { activeCornerHandle = corners; return; }
             }
 
-            // 5. NORMALES ZEICHNEN / NAHTLOS FORTSETZEN
             if (mode === 'wall' || mode === 'arrow') {
                 isDrawing = true;
-                let startPt = pos;
-
-                if (mode === 'wall') {
-                    if (lastWallEnd && Math.hypot(pos.x - lastWallEnd.x, pos.y - lastWallEnd.y) < 35) {
-                        startPt = lastWallEnd;
-                    } else {
-                        startPt = snapToExistingPoints(pos, 30);
-                    }
-                }
-
-                currentStart = startPt;
-                currentEnd = startPt;
+                let startPt = (mode === 'wall' && lastWallEnd && Math.hypot(pos.x - lastWallEnd.x, pos.y - lastWallEnd.y) < 35) ? lastWallEnd : snapToExistingPoints(pos, 30);
+                currentStart = startPt; currentEnd = startPt;
             }
         }
 
         function handlePointerMove(e) {
             let pos = getPos(e);
             currentPointerPos = pos;
-
             if (mode === 'delete') return;
 
             if (activeTextHandle !== null) {
-                let t = textNotes[activeTextHandle];
-                t.x = pos.x;
-                t.y = pos.y;
-                t.attachedPhotoId = getPhotoIdAt(pos);
-                redraw();
-                updateLabels();
-                return;
+                textNotes[activeTextHandle].x = pos.x; textNotes[activeTextHandle].y = pos.y;
+                saveAppData(); redraw(); updateLabels(); return;
             }
 
             if (activeCornerHandle) {
-                let snappedPos = snapToExistingPoints(pos, 25, activeCornerHandle[0].pt);
-                activeCornerHandle.forEach(handle => {
-                    let w = walls[handle.wallIndex];
-                    w[handle.pointName] = { x: snappedPos.x, y: snappedPos.y };
-                    w.attachedPhotoId = getPhotoIdAt(snappedPos);
-                });
-                redraw();
-                updateLabels();
-                return;
+                let snapped = snapToExistingPoints(pos, 25, activeCornerHandle[0].pt);
+                activeCornerHandle.forEach(h => { walls[h.wallIndex][h.pointName] = { x: snapped.x, y: snapped.y }; });
+                saveAppData(); redraw(); updateLabels(); return;
             }
 
             if (activeArrowHandle) {
-                let a = arrows[activeArrowHandle.arrowIndex];
-                a[activeArrowHandle.pointName] = pos;
-                a.attachedPhotoId = getPhotoIdAt(pos);
-                redraw();
-                updateLabels();
-                return;
+                arrows[activeArrowHandle.arrowIndex][activeArrowHandle.pointName] = pos;
+                saveAppData(); redraw(); updateLabels(); return;
             }
 
             if (isResizingPhoto && activePhoto) {
-                activePhoto.w = Math.max(60, pos.x - activePhoto.x);
-                activePhoto.h = Math.max(60, pos.y - activePhoto.y);
-                redraw();
-                updateLabels();
-                return;
+                activePhoto.w = Math.max(60, pos.x - activePhoto.x); activePhoto.h = Math.max(60, pos.y - activePhoto.y);
+                saveAppData(); redraw(); updateLabels(); return;
             }
 
             if (isDraggingPhoto && activePhoto) {
-                const newX = pos.x - dragOffset.x;
-                const newY = pos.y - dragOffset.y;
-                const dx = newX - activePhoto.x;
-                const dy = newY - activePhoto.y;
-
-                activePhoto.x = newX;
-                activePhoto.y = newY;
-
-                arrows.forEach(a => {
-                    if (a.attachedPhotoId === activePhoto.id) {
-                        a.p1.x += dx; a.p1.y += dy;
-                        a.p2.x += dx; a.p2.y += dy;
-                    }
-                });
-
-                walls.forEach(w => {
-                    if (w.attachedPhotoId === activePhoto.id) {
-                        w.p1.x += dx; w.p1.y += dy;
-                        w.p2.x += dx; w.p2.y += dy;
-                    }
-                });
-
-                textNotes.forEach(t => {
-                    if (t.attachedPhotoId === activePhoto.id) {
-                        t.x += dx; t.y += dy;
-                    }
-                });
-
-                redraw();
-                updateLabels();
-                return;
+                let dx = (pos.x - dragOffset.x) - activePhoto.x, dy = (pos.y - dragOffset.y) - activePhoto.y;
+                activePhoto.x += dx; activePhoto.y += dy;
+                saveAppData(); redraw(); updateLabels(); return;
             }
 
             if (!isDrawing || !currentStart) return;
-
-            if (mode === 'wall') {
-                const dx = Math.abs(pos.x - currentStart.x);
-                const dy = Math.abs(pos.y - currentStart.y);
-                if (dx < 18) pos.x = currentStart.x;
-                if (dy < 18) pos.y = currentStart.y;
-
-                pos = snapToExistingPoints(pos, 35);
-            }
-
+            if (mode === 'wall') pos = snapToExistingPoints(pos, 35);
             currentEnd = pos;
-            redraw();
-            drawPreviewLine();
+            redraw(); drawPreviewLine();
         }
 
         function handlePointerUp() {
             if (activeArrowHandle || activeCornerHandle || activeTextHandle !== null) {
-                activeArrowHandle = null;
-                activeCornerHandle = null;
-                activeTextHandle = null;
-                redraw();
-                return;
+                activeArrowHandle = null; activeCornerHandle = null; activeTextHandle = null; saveAppData(); redraw(); return;
             }
-
-            if (isResizingPhoto || isDraggingPhoto) {
-                isResizingPhoto = false;
-                isDraggingPhoto = false;
-                activePhoto = null;
-                return;
-            }
-
+            if (isResizingPhoto || isDraggingPhoto) { isResizingPhoto = false; isDraggingPhoto = false; activePhoto = null; saveAppData(); return; }
             if (!isDrawing) return;
             isDrawing = false;
 
-            if (currentStart && currentEnd) {
-                const dist = Math.hypot(currentEnd.x - currentStart.x, currentEnd.y - currentStart.y);
-                if (dist > 15) {
-                    const attachedPhotoId = getPhotoIdAt(currentEnd) || getPhotoIdAt(currentStart);
-
-                    if (mode === 'wall') {
-                        let finalEnd = snapToExistingPoints(currentEnd, 35);
-                        walls.push({ 
-                            p1: { x: currentStart.x, y: currentStart.y }, 
-                            p2: { x: finalEnd.x, y: finalEnd.y }, 
-                            length: null, 
-                            rawMeasurements: [],
-                            attachedPhotoId: attachedPhotoId 
-                        });
-
-                        lastWallEnd = finalEnd;
-                        updateLabels();
-                    } else if (mode === 'arrow') {
-                        const newArrowIndex = arrows.length;
-                        arrows.push({ 
-                            p1: currentStart, 
-                            p2: currentEnd, 
-                            length: null, 
-                            rawMeasurements: [],
-                            attachedPhotoId: attachedPhotoId 
-                        });
-                        updateLabels();
-                        openMeasureModal('arrow', newArrowIndex);
-                    }
+            if (currentStart && currentEnd && Math.hypot(currentEnd.x - currentStart.x, currentEnd.y - currentStart.y) > 15) {
+                if (mode === 'wall') {
+                    let finalEnd = snapToExistingPoints(currentEnd, 35);
+                    walls.push({ p1: currentStart, p2: finalEnd, length: null, rawMeasurements: [] });
+                    lastWallEnd = finalEnd; saveAppData(); updateLabels();
+                } else if (mode === 'arrow') {
+                    let idx = arrows.length;
+                    arrows.push({ p1: currentStart, p2: currentEnd, length: null, rawMeasurements: [] });
+                    saveAppData(); updateLabels(); openMeasureModal('arrow', idx);
                 }
             }
-
-            currentStart = null;
-            currentEnd = null;
-            redraw();
+            currentStart = null; currentEnd = null; redraw();
         }
 
         function saveTextNote() {
-            const val = document.getElementById('noteInput').value.trim();
+            let val = document.getElementById('noteInput').value.trim();
             if (val && pendingTextPos) {
-                const attachedPhotoId = getPhotoIdAt(pendingTextPos);
-                textNotes.push({
-                    text: val,
-                    x: pendingTextPos.x,
-                    y: pendingTextPos.y,
-                    attachedPhotoId: attachedPhotoId
-                });
-                updateLabels();
+                textNotes.push({ text: val, x: pendingTextPos.x, y: pendingTextPos.y });
+                saveAppData(); updateLabels();
             }
             closeModal('textModal');
         }
 
-        function getPhotoIdAt(pos) {
-            for (let i = photos.length - 1; i >= 0; i--) {
-                let p = photos[i];
-                if (pos.x >= p.x && pos.x <= p.x + p.w && pos.y >= p.y && pos.y <= p.y + p.h) {
-                    return p.id;
-                }
-            }
-            return null;
-        }
-
         function snapToExistingPoints(pos, threshold = 35, ignorePoint = null) {
             for (let w of walls) {
-                if ((!ignorePoint || Math.hypot(w.p1.x - ignorePoint.x, w.p1.y - ignorePoint.y) > 5) && Math.hypot(pos.x - w.p1.x, pos.y - w.p1.y) < threshold) {
-                    return { x: w.p1.x, y: w.p1.y };
-                }
-                if ((!ignorePoint || Math.hypot(w.p2.x - ignorePoint.x, w.p2.y - ignorePoint.y) > 5) && Math.hypot(pos.x - w.p2.x, pos.y - w.p2.y) < threshold) {
-                    return { x: w.p2.x, y: w.p2.y };
-                }
+                if ((!ignorePoint || Math.hypot(w.p1.x - ignorePoint.x, w.p1.y - ignorePoint.y) > 5) && Math.hypot(pos.x - w.p1.x, pos.y - w.p1.y) < threshold) return w.p1;
+                if ((!ignorePoint || Math.hypot(w.p2.x - ignorePoint.x, w.p2.y - ignorePoint.y) > 5) && Math.hypot(pos.x - w.p2.x, pos.y - w.p2.y) < threshold) return w.p2;
             }
             return pos;
         }
@@ -550,153 +612,69 @@
         canvas.addEventListener('mousedown', handlePointerDown);
         canvas.addEventListener('mousemove', handlePointerMove);
         canvas.addEventListener('mouseup', handlePointerUp);
-
-        canvas.addEventListener('touchstart', (e) => { e.preventDefault(); handlePointerDown(e); }, { passive: false });
-        canvas.addEventListener('touchmove', (e) => { e.preventDefault(); handlePointerMove(e); }, { passive: false });
-        canvas.addEventListener('touchend', (e) => { e.preventDefault(); handlePointerUp(); }, { passive: false });
-        canvas.addEventListener('contextmenu', (e) => e.preventDefault()); // Verhindert Browser-Kontextmenüs
+        canvas.addEventListener('touchstart', (e) => handlePointerDown(e), { passive: true });
+        canvas.addEventListener('touchmove', (e) => handlePointerMove(e), { passive: true });
+        canvas.addEventListener('touchend', () => handlePointerUp(), { passive: true });
+        canvas.addEventListener('contextmenu', (e) => e.preventDefault());
 
         function drawPreviewLine() {
             if (!currentStart || !currentEnd) return;
-            ctx.beginPath();
-            ctx.moveTo(currentStart.x, currentStart.y);
-            ctx.lineTo(currentEnd.x, currentEnd.y);
-            ctx.strokeStyle = mode === 'arrow' ? '#ff4757' : '#00d2ff';
-            ctx.lineWidth = 3;
-            ctx.setLineDash([5, 5]);
-            ctx.stroke();
-            ctx.setLineDash([]);
-
-            if (mode === 'arrow' || mode === 'wall') drawMagnifier(currentEnd);
+            ctx.beginPath(); ctx.moveTo(currentStart.x, currentStart.y); ctx.lineTo(currentEnd.x, currentEnd.y);
+            ctx.strokeStyle = mode === 'arrow' ? '#ff4757' : '#00d2ff'; ctx.lineWidth = 3; ctx.setLineDash([5, 5]); ctx.stroke(); ctx.setLineDash([]);
+            drawMagnifier(currentEnd);
         }
 
         function redraw() {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
-            
-            ctx.strokeStyle = '#1e1e2d';
-            ctx.lineWidth = 1;
+            ctx.strokeStyle = '#1e1e2d'; ctx.lineWidth = 1;
             for(let x=0; x<canvas.width; x+=30) { ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,canvas.height); ctx.stroke(); }
             for(let y=0; y<canvas.height; y+=30) { ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(canvas.width,y); ctx.stroke(); }
 
             photos.forEach(p => {
                 ctx.drawImage(p.img, p.x, p.y, p.w, p.h);
-                ctx.strokeStyle = mode === 'delete' ? '#ff4757' : '#00d2ff';
-                ctx.lineWidth = 1.5;
-                ctx.strokeRect(p.x, p.y, p.w, p.h);
-
-                if (mode !== 'delete') {
-                    ctx.fillStyle = '#00d2ff';
-                    ctx.beginPath(); ctx.arc(p.x, p.y, 14, 0, Math.PI * 2); ctx.fill();
-                    ctx.fillStyle = '#000'; ctx.font = 'bold 14px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-                    ctx.fillText('┼', p.x, p.y);
-
-                    ctx.fillStyle = '#00d2ff';
-                    ctx.beginPath(); ctx.arc(p.x + p.w, p.y + p.h, 14, 0, Math.PI * 2); ctx.fill();
-                    ctx.fillStyle = '#000'; ctx.font = 'bold 12px sans-serif';
-                    ctx.fillText('⇲', p.x + p.w, p.y + p.h);
-                }
+                ctx.strokeStyle = '#00d2ff'; ctx.lineWidth = 1.5; ctx.strokeRect(p.x, p.y, p.w, p.h);
             });
 
             walls.forEach(w => {
-                ctx.beginPath();
-                ctx.moveTo(w.p1.x, w.p1.y);
-                ctx.lineTo(w.p2.x, w.p2.y);
-                ctx.strokeStyle = '#ffffff';
-                ctx.lineWidth = 5;
-                ctx.lineCap = 'round';
-                ctx.stroke();
+                ctx.beginPath(); ctx.moveTo(w.p1.x, w.p1.y); ctx.lineTo(w.p2.x, w.p2.y);
+                ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 5; ctx.lineCap = 'round'; ctx.stroke();
             });
 
             arrows.forEach(a => drawDoubleArrow(a.p1, a.p2));
-
             drawRightAngleSymbols();
 
-            if ((activeArrowHandle || activeCornerHandle) && currentPointerPos) {
-                drawMagnifier(currentPointerPos);
-            }
+            if ((activeArrowHandle || activeCornerHandle) && currentPointerPos) drawMagnifier(currentPointerPos);
         }
 
         function drawDoubleArrow(p1, p2) {
-            ctx.beginPath();
-            ctx.moveTo(p1.x, p1.y);
-            ctx.lineTo(p2.x, p2.y);
-            ctx.strokeStyle = '#ff4757';
-            ctx.lineWidth = 3;
-            ctx.stroke();
-
-            drawArrowHead(p1, p2);
-            drawArrowHead(p2, p1);
+            ctx.beginPath(); ctx.moveTo(p1.x, p1.y); ctx.lineTo(p2.x, p2.y); ctx.strokeStyle = '#ff4757'; ctx.lineWidth = 3; ctx.stroke();
+            drawArrowHead(p1, p2); drawArrowHead(p2, p1);
         }
 
         function drawArrowHead(from, to) {
             const angle = Math.atan2(to.y - from.y, to.x - from.x);
-            const headLen = 12;
-            ctx.beginPath();
-            ctx.moveTo(to.x, to.y);
-            ctx.lineTo(to.x - headLen * Math.cos(angle - Math.PI / 6), to.y - headLen * Math.sin(angle - Math.PI / 6));
-            ctx.lineTo(to.x - headLen * Math.cos(angle + Math.PI / 6), to.y - headLen * Math.sin(angle + Math.PI / 6));
-            ctx.fillStyle = '#ff4757';
-            ctx.fill();
+            ctx.beginPath(); ctx.moveTo(to.x, to.y);
+            ctx.lineTo(to.x - 12 * Math.cos(angle - Math.PI / 6), to.y - 12 * Math.sin(angle - Math.PI / 6));
+            ctx.lineTo(to.x - 12 * Math.cos(angle + Math.PI / 6), to.y - 12 * Math.sin(angle + Math.PI / 6));
+            ctx.fillStyle = '#ff4757'; ctx.fill();
         }
 
-        function drawMagnifier(targetPos) {
-            const zoom = 2.5;
-            const size = 120;
-            const radius = size / 2;
-
-            let magX = targetPos.x;
-            let magY = targetPos.y - 100;
-
-            if (magY - radius < 10) magY = targetPos.y + 100;
-            if (magX - radius < 10) magX = radius + 10;
-            if (magX + radius > canvas.width - 10) magX = canvas.width - radius - 10;
-
-            ctx.save();
-            ctx.beginPath();
-            ctx.arc(magX, magY, radius, 0, Math.PI * 2);
-            ctx.clip();
-
-            ctx.fillStyle = '#0a0a0f';
-            ctx.fillRect(magX - radius, magY - radius, size, size);
-
-            ctx.translate(magX, magY);
-            ctx.scale(zoom, zoom);
-            ctx.translate(-targetPos.x, -targetPos.y);
-
-            photos.forEach(p => ctx.drawImage(p.img, p.x, p.y, p.w, p.h));
-
-            ctx.restore();
-
-            ctx.beginPath();
-            ctx.arc(magX, magY, radius, 0, Math.PI * 2);
-            ctx.strokeStyle = '#00d2ff';
-            ctx.lineWidth = 3;
-            ctx.stroke();
-
-            ctx.beginPath();
-            ctx.moveTo(magX - 10, magY); ctx.lineTo(magX + 10, magY);
-            ctx.moveTo(magX, magY - 10); ctx.lineTo(magX, magY + 10);
-            ctx.strokeStyle = '#ff4757';
-            ctx.lineWidth = 1.5;
-            ctx.stroke();
-        }
-
+        // Rechte-Winkel Symbole (90°)
         function drawRightAngleSymbols() {
             for (let i = 0; i < walls.length; i++) {
                 for (let j = i + 1; j < walls.length; j++) {
                     const w1 = walls[i], w2 = walls[j];
                     let vertex = null, pA = null, pB = null;
 
-                    if (samePt(w1.p1, w2.p1)) { vertex = w1.p1; pA = w1.p2; pB = w2.p2; }
-                    else if (samePt(w1.p1, w2.p2)) { vertex = w1.p1; pA = w1.p2; pB = w2.p1; }
-                    else if (samePt(w1.p2, w2.p1)) { vertex = w1.p2; pA = w1.p1; pB = w2.p2; }
-                    else if (samePt(w1.p2, w2.p2)) { vertex = w1.p2; pA = w1.p1; pB = w2.p1; }
+                    if (Math.hypot(w1.p1.x - w2.p1.x, w1.p1.y - w2.p1.y) < 3) { vertex = w1.p1; pA = w1.p2; pB = w2.p2; }
+                    else if (Math.hypot(w1.p1.x - w2.p2.x, w1.p1.y - w2.p2.y) < 3) { vertex = w1.p1; pA = w1.p2; pB = w2.p1; }
+                    else if (Math.hypot(w1.p2.x - w2.p1.x, w1.p2.y - w2.p1.y) < 3) { vertex = w1.p2; pA = w1.p1; pB = w2.p2; }
+                    else if (Math.hypot(w1.p2.x - w2.p2.x, w1.p2.y - w2.p2.y) < 3) { vertex = w1.p2; pA = w1.p1; pB = w2.p1; }
 
                     if (vertex) {
                         const vA = { x: pA.x - vertex.x, y: pA.y - vertex.y };
                         const vB = { x: pB.x - vertex.x, y: pB.y - vertex.y };
-                        const lenA = Math.hypot(vA.x, vA.y);
-                        const lenB = Math.hypot(vB.x, vB.y);
+                        const lenA = Math.hypot(vA.x, vA.y), lenB = Math.hypot(vB.x, vB.y);
 
                         if (lenA > 0 && lenB > 0) {
                             const dot = (vA.x * vB.x + vA.y * vB.y) / (lenA * lenB);
@@ -709,9 +687,7 @@
                                 ctx.moveTo(vertex.x + uA.x, vertex.y + uA.y);
                                 ctx.lineTo(vertex.x + uA.x + uB.x, vertex.y + uA.y + uB.y);
                                 ctx.lineTo(vertex.x + uB.x, vertex.y + uB.y);
-                                ctx.strokeStyle = '#00d2ff';
-                                ctx.lineWidth = 1.5;
-                                ctx.stroke();
+                                ctx.strokeStyle = '#00d2ff'; ctx.lineWidth = 1.5; ctx.stroke();
                             }
                         }
                     }
@@ -719,45 +695,46 @@
             }
         }
 
-        function samePt(p1, p2) { return Math.hypot(p1.x - p2.x, p1.y - p2.y) < 3; }
+        function drawMagnifier(targetPos) {
+            const zoom = 2.5, size = 120, radius = size / 2;
+            let magX = targetPos.x, magY = targetPos.y - 100;
+            if (magY - radius < 10) magY = targetPos.y + 100;
+            if (magX - radius < 10) magX = radius + 10;
+            if (magX + radius > canvas.width - 10) magX = canvas.width - radius - 10;
+
+            ctx.save(); ctx.beginPath(); ctx.arc(magX, magY, radius, 0, Math.PI * 2); ctx.clip();
+            ctx.fillStyle = '#0a0a0f'; ctx.fillRect(magX - radius, magY - radius, size, size);
+            ctx.translate(magX, magY); ctx.scale(zoom, zoom); ctx.translate(-targetPos.x, -targetPos.y);
+
+            photos.forEach(p => ctx.drawImage(p.img, p.x, p.y, p.w, p.h));
+            walls.forEach(w => { ctx.beginPath(); ctx.moveTo(w.p1.x, w.p1.y); ctx.lineTo(w.p2.x, w.p2.y); ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 5; ctx.stroke(); });
+            arrows.forEach(a => drawDoubleArrow(a.p1, a.p2));
+            ctx.restore();
+
+            ctx.beginPath(); ctx.arc(magX, magY, radius, 0, Math.PI * 2); ctx.strokeStyle = '#00d2ff'; ctx.lineWidth = 3; ctx.stroke();
+        }
 
         function updateLabels() {
             labelsLayer.innerHTML = '';
-            
             walls.forEach((w, idx) => {
-                const midX = (w.p1.x + w.p2.x) / 2;
-                const midY = (w.p1.y + w.p2.y) / 2;
-
-                const label = document.createElement('div');
-                label.className = 'wall-label';
-                label.style.left = `${midX}px`;
-                label.style.top = `${midY}px`;
-                label.innerText = w.length ? `${w.length} mm` : `W${idx + 1}`;
-                label.onclick = () => handleLabelClick('wall', idx);
-                labelsLayer.appendChild(label);
+                let lbl = document.createElement('div'); lbl.className = 'wall-label';
+                lbl.style.left = `${(w.p1.x + w.p2.x) / 2}px`; lbl.style.top = `${(w.p1.y + w.p2.y) / 2}px`;
+                lbl.innerText = w.length ? `${w.length} mm` : `W${idx + 1}`;
+                lbl.onclick = (e) => { e.stopPropagation(); handleLabelClick('wall', idx); };
+                labelsLayer.appendChild(lbl);
             });
-
             arrows.forEach((a, idx) => {
-                const midX = (a.p1.x + a.p2.x) / 2;
-                const midY = (a.p1.y + a.p2.y) / 2;
-
-                const label = document.createElement('div');
-                label.className = 'arrow-label';
-                label.style.left = `${midX}px`;
-                label.style.top = `${midY}px`;
-                label.innerText = a.length ? `${a.length} mm` : `Pfeil ${idx + 1}`;
-                label.onclick = () => handleLabelClick('arrow', idx);
-                labelsLayer.appendChild(label);
+                let lbl = document.createElement('div'); lbl.className = 'arrow-label';
+                lbl.style.left = `${(a.p1.x + a.p2.x) / 2}px`; lbl.style.top = `${(a.p1.y + a.p2.y) / 2}px`;
+                lbl.innerText = a.length ? `${a.length} mm` : `Pfeil ${idx + 1}`;
+                lbl.onclick = (e) => { e.stopPropagation(); handleLabelClick('arrow', idx); };
+                labelsLayer.appendChild(lbl);
             });
-
             textNotes.forEach((t, idx) => {
-                const label = document.createElement('div');
-                label.className = 'text-label';
-                label.style.left = `${t.x}px`;
-                label.style.top = `${t.y}px`;
-                label.innerText = t.text;
-                label.onclick = () => handleLabelClick('text', idx);
-                labelsLayer.appendChild(label);
+                let lbl = document.createElement('div'); lbl.className = 'text-label';
+                lbl.style.left = `${t.x}px`; lbl.style.top = `${t.y}px`; lbl.innerText = t.text;
+                lbl.onclick = (e) => { e.stopPropagation(); handleLabelClick('text', idx); };
+                labelsLayer.appendChild(lbl);
             });
         }
 
@@ -766,23 +743,16 @@
                 if (type === 'wall') walls.splice(index, 1);
                 if (type === 'arrow') arrows.splice(index, 1);
                 if (type === 'text') textNotes.splice(index, 1);
-                redraw();
-                updateLabels();
-            } else {
-                if (type === 'wall' || type === 'arrow') {
-                    openMeasureModal(type, index);
-                }
+                saveAppData(); redraw(); updateLabels();
+            } else if (type === 'wall' || type === 'arrow') {
+                openMeasureModal(type, index);
             }
         }
 
         function confirmClearAll() {
-            if (confirm("Möchtest du wirklich das gesamte Aufmaß löschen?")) {
-                walls = [];
-                arrows = [];
-                textNotes = [];
-                photos = [];
-                labelsLayer.innerHTML = '';
-                resetState();
+            if (confirm("Aktuelles Blatt wirklich leeren?")) {
+                walls = []; arrows = []; textNotes = []; photos = [];
+                saveAppData(); resetState();
             }
         }
 
@@ -790,135 +760,133 @@
 
         function openMeasureModal(type, index) {
             selectedTarget = { type, index };
-            const item = type === 'wall' ? walls[index] : arrows[index];
+            let item = type === 'wall' ? walls[index] : arrows[index];
+            document.getElementById('modalTitle').innerText = `${type === 'wall' ? 'Wand ' + (index + 1) : 'Pfeil ' + (index + 1)} vermessen`;
             
-            document.getElementById('modalTitle').innerText = `${type === 'wall' ? 'Wand ' + (index + 1) : 'Doppelpfeil ' + (index + 1)} vermessen`;
-            
-            const inputs = document.querySelectorAll('.m-val');
-            inputs.forEach((input, i) => {
-                input.value = (item.rawMeasurements && item.rawMeasurements[i]) ? item.rawMeasurements[i] : '';
-            });
+            selectionMode = item.selectionMode || 'min';
+            manualSelectedIndex = item.manualSelectedIndex || 0;
+            updateSelectionModeUI();
 
-            calculateMin();
+            let container = document.getElementById('measureListContainer'); container.innerHTML = '';
+            let existing = item.rawMeasurements && item.rawMeasurements.length ? item.rawMeasurements : [''];
+            existing.forEach((v, i) => addMeasureRow(v, i === manualSelectedIndex));
+            calculateResult();
             document.getElementById('measureModal').classList.add('active');
-
-            setTimeout(() => {
-                const firstInput = document.getElementById('input1');
-                firstInput.focus();
-                firstInput.select();
-            }, 100);
         }
 
-        function calculateMin() {
-            const inputs = document.querySelectorAll('.m-val');
-            let values = [];
-            inputs.forEach(input => {
-                const val = parseFloat(input.value);
-                if (!isNaN(val) && val > 0) values.push(val);
-            });
+        function setMeasureSelectionMode(modeType) {
+            selectionMode = modeType;
+            updateSelectionModeUI();
+            calculateResult();
+        }
 
-            if (values.length > 0) {
-                const min = Math.min(...values);
-                const max = Math.max(...values);
-                const diff = max - min;
-                document.getElementById('minResult').innerText = `${min} mm`;
-                document.getElementById('diffWarning').innerText = diff > 0 ? `⚠️ Bauabweichung: ${diff} mm` : `✓ Identisch`;
+        function updateSelectionModeUI() {
+            document.getElementById('modeMin').classList.toggle('active', selectionMode === 'min');
+            document.getElementById('modeMax').classList.toggle('active', selectionMode === 'max');
+            document.getElementById('modeManual').classList.toggle('active', selectionMode === 'manual');
+        }
+
+        function addMeasureRow(val = '', isSelected = false) {
+            let container = document.getElementById('measureListContainer');
+            let idx = container.children.length;
+            let row = document.createElement('div');
+            row.className = `measure-row ${isSelected ? 'selected-row' : ''}`;
+            row.innerHTML = `
+                <input type="number" class="m-val" placeholder="Messung (mm)" value="${val}" oninput="calculateResult()">
+                <button class="btn" style="padding: 6px 10px; background: #2a2a3d; font-size:0.75rem;" onclick="selectManualRow(${idx})">Auswählen</button>
+                <button class="btn btn-danger" style="padding: 8px 10px;" onclick="removeMeasureRow(this)">✕</button>
+            `;
+            container.appendChild(row);
+            calculateResult();
+        }
+
+        function selectManualRow(index) {
+            selectionMode = 'manual';
+            updateSelectionModeUI();
+            manualSelectedIndex = index;
+            document.querySelectorAll('.measure-row').forEach((r, i) => {
+                r.classList.toggle('selected-row', i === index);
+            });
+            calculateResult();
+        }
+
+        function removeMeasureRow(btn) {
+            let container = document.getElementById('measureListContainer');
+            if (container.children.length > 1) {
+                btn.parentElement.remove();
+                calculateResult();
+            }
+        }
+
+        function calculateResult() {
+            let inputs = document.querySelectorAll('.m-val');
+            let vals = [];
+            inputs.forEach(inp => { let v = parseFloat(inp.value); if (!isNaN(v) && v > 0) vals.push(v); });
+
+            if (vals.length > 0) {
+                let chosenVal = vals[0];
+                if (selectionMode === 'min') chosenVal = Math.min(...vals);
+                else if (selectionMode === 'max') chosenVal = Math.max(...vals);
+                else if (selectionMode === 'manual') {
+                    if (manualSelectedIndex >= vals.length) manualSelectedIndex = vals.length - 1;
+                    chosenVal = vals[manualSelectedIndex];
+                }
+
+                document.getElementById('minResult').innerText = chosenVal + ' mm';
+                let min = Math.min(...vals), max = Math.max(...vals);
+                let diff = max - min;
+                document.getElementById('diffWarning').innerText = (vals.length > 1 && diff > 5) ? `⚠️ Hinweis: Differenz von ${diff} mm zwischen den Messungen!` : '';
             } else {
-                document.getElementById('minResult').innerText = `--- mm`;
-                document.getElementById('diffWarning').innerText = ``;
+                document.getElementById('minResult').innerText = '--- mm';
+                document.getElementById('diffWarning').innerText = '';
             }
         }
 
         function saveMeasurement() {
-            const minText = document.getElementById('minResult').innerText;
-            if (selectedTarget) {
-                const inputs = document.querySelectorAll('.m-val');
-                let rawValues = [];
-                inputs.forEach(input => rawValues.push(input.value));
+            if (!selectedTarget) return;
+            let inputs = document.querySelectorAll('.m-val');
+            let vals = [], raw = [];
+            inputs.forEach(inp => { raw.push(inp.value); let v = parseFloat(inp.value); if (!isNaN(v) && v > 0) vals.push(v); });
 
-                const item = selectedTarget.type === 'wall' ? walls[selectedTarget.index] : arrows[selectedTarget.index];
-                item.rawMeasurements = rawValues;
-
-                if (minText !== '--- mm') {
-                    item.length = parseFloat(minText);
+            if (vals.length > 0) {
+                let chosenVal = vals[0];
+                if (selectionMode === 'min') chosenVal = Math.min(...vals);
+                else if (selectionMode === 'max') chosenVal = Math.max(...vals);
+                else if (selectionMode === 'manual') {
+                    if (manualSelectedIndex >= vals.length) manualSelectedIndex = vals.length - 1;
+                    chosenVal = vals[manualSelectedIndex];
                 }
-                updateLabels();
+
+                let item = selectedTarget.type === 'wall' ? walls[selectedTarget.index] : arrows[selectedTarget.index];
+                item.length = chosenVal;
+                item.rawMeasurements = raw;
+                item.selectionMode = selectionMode;
+                item.manualSelectedIndex = manualSelectedIndex;
+
+                if (selectedTarget.type === 'wall') {
+                    let oldP2 = { ...item.p2 };
+                    let angle = Math.atan2(item.p2.y - item.p1.y, item.p2.x - item.p1.x);
+                    let targetPx = chosenVal * SCALE;
+                    item.p2 = { x: item.p1.x + Math.cos(angle) * targetPx, y: item.p1.y + Math.sin(angle) * targetPx };
+                    let dx = item.p2.x - oldP2.x, dy = item.p2.y - oldP2.y;
+                    walls.forEach((w, idx) => {
+                        if (idx !== selectedTarget.index) {
+                            if (Math.hypot(w.p1.x - oldP2.x, w.p1.y - oldP2.y) < 3) w.p1 = { x: w.p1.x + dx, y: w.p1.y + dy };
+                            if (Math.hypot(w.p2.x - oldP2.x, w.p2.y - oldP2.y) < 3) w.p2 = { x: w.p2.x + dx, y: w.p2.y + dy };
+                        }
+                    });
+                }
             }
+
             closeModal('measureModal');
+            saveAppData();
+            redraw();
+            updateLabels();
         }
 
-        function exportPDF() {
-            const dataUrl = canvas.toDataURL('image/png');
-            const printWindow = window.open('', '_blank');
-            
-            printWindow.document.write(`
-                <!DOCTYPE html>
-                <html>
-                <head>
-                    <title>Aufmass_Protokoll_${new Date().toISOString().slice(0,10)}</title>
-                    <style>
-                        body { font-family: Arial, sans-serif; padding: 25px; color: #111; }
-                        h1 { color: #0082a6; border-bottom: 2px solid #0082a6; padding-bottom: 6px; font-size: 1.6rem; }
-                        .meta { margin-bottom: 20px; font-size: 0.9rem; color: #555; }
-                        .canvas-img { max-width: 100%; border: 1px solid #ccc; border-radius: 6px; margin: 15px 0; display: block; }
-                        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
-                        th, td { border: 1px solid #ddd; padding: 10px; text-align: left; font-size: 0.9rem; }
-                        th { background-color: #f4f6f8; color: #333; }
-                        tr:nth-child(even) { background-color: #fafafa; }
-                        .min-val { font-weight: bold; color: #0082a6; }
-                    </style>
-                </head>
-                <body>
-                    <h1>Baustellen-Aufmaß Protokoll</h1>
-                    <div class="meta">
-                        <strong>Datum:</strong> ${new Date().toLocaleDateString('de-DE')} &nbsp;|&nbsp; 
-                        <strong>Erstellt mit:</strong> Aufmaß Pro PWA
-                    </div>
-                    
-                    <img src="${dataUrl}" class="canvas-img" />
-                    
-                    <h3>Messwert-Übersicht (Minimum-Prinzip)</h3>
-                    <table>
-                        <thead>
-                            <tr>
-                                <th>Typ / Bezeichnung</th>
-                                <th>Kleinstmaß (Min)</th>
-                                <th>Erfasste Einzelwerte</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            ${walls.map((w, i) => `
-                                <tr>
-                                    <td>Wand ${i + 1}</td>
-                                    <td class="min-val">${w.length ? w.length + ' mm' : '---'}</td>
-                                    <td>${w.rawMeasurements && w.rawMeasurements.filter(v=>v).length ? w.rawMeasurements.filter(v=>v).join(' mm, ') + ' mm' : '---'}</td>
-                                </tr>
-                            `).join('')}
-                            ${arrows.map((a, i) => `
-                                <tr>
-                                    <td>Doppelpfeil ${i + 1}</td>
-                                    <td class="min-val">${a.length ? a.length + ' mm' : '---'}</td>
-                                    <td>${a.rawMeasurements && a.rawMeasurements.filter(v=>v).length ? a.rawMeasurements.filter(v=>v).join(' mm, ') + ' mm' : '---'}</td>
-                                </tr>
-                            `).join('')}
-                            ${textNotes.map((t, i) => `
-                                <tr>
-                                    <td>Notiz ${i + 1}</td>
-                                    <td colspan="2">${t.text}</td>
-                                </tr>
-                            `).join('')}
-                        </tbody>
-                    </table>
-                    <script>
-                        window.onload = function() { window.print(); }
-                    <\/script>
-                </body>
-                </html>
-            `);
-            printWindow.document.close();
-        }
+        function exportPDF() { window.print(); }
 
-        resizeCanvas();
+        loadAppData();
     </script>
 </body>
 </html>
