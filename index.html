@@ -13,7 +13,15 @@
     </script>
 
     <style>
-        * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; user-select: none; }
+        * { 
+            box-sizing: border-box; 
+            margin: 0; 
+            padding: 0; 
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            -webkit-user-select: none;
+            user-select: none;
+            -webkit-touch-callout: none;
+        }
         body { background: #121218; color: #f0f0f0; display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
         header { background: #1e1e2d; padding: 12px 16px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #33334d; }
         h1 { font-size: 1.1rem; color: #00d2ff; }
@@ -45,7 +53,7 @@
             cursor: pointer;
         }
 
-        .toolbar { background: #1e1e2d; padding: 10px; display: flex; gap: 8px; border-top: 1px solid #33334d; justify-content: center; flex-wrap: wrap; }
+        .toolbar { background: #1e1e2d; padding: 10px; display: flex; gap: 8px; border-top: 1px solid #33334d; justify-content: center; flex-wrap: wrap; z-index: 20; }
         .btn { background: #3a3a52; color: #fff; border: none; padding: 10px 14px; border-radius: 6px; font-weight: bold; font-size: 0.85rem; cursor: pointer; }
         .btn.active { background: #00d2ff; color: #000; }
         .btn-success { background: #2ed573; color: #000; }
@@ -58,7 +66,17 @@
         
         .measure-list { display: flex; flex-direction: column; gap: 8px; margin: 12px 0; }
         .measure-row { display: flex; gap: 8px; align-items: center; }
-        input[type="number"], input[type="text"] { flex: 1; padding: 10px; background: #121218; border: 1px solid #33334d; border-radius: 6px; color: #fff; font-size: 1rem; user-select: text; }
+        input[type="number"], input[type="text"] { 
+            flex: 1; 
+            padding: 10px; 
+            background: #121218; 
+            border: 1px solid #33334d; 
+            border-radius: 6px; 
+            color: #fff; 
+            font-size: 1rem; 
+            -webkit-user-select: auto;
+            user-select: auto;
+        }
 
         .result-box { background: rgba(0, 210, 255, 0.1); border: 1px solid #00d2ff; padding: 12px; border-radius: 8px; margin-top: 12px; }
         .result-title { font-size: 0.8rem; color: #aaa; text-transform: uppercase; }
@@ -69,7 +87,7 @@
 <body>
 
     <header>
-        <h1>Aufmaß Pro 3.3</h1>
+        <h1>Aufmaß Pro 4.6</h1>
         <div>
             <button class="btn btn-success" onclick="exportPDF()">📄 PDF Export</button>
             <button class="btn btn-danger" onclick="confirmClearAll()">Neu</button>
@@ -87,8 +105,8 @@
             <button class="btn" id="toolArrow" onclick="setMode('arrow')">↔️ Pfeil</button>
             <button class="btn" id="toolText" onclick="setMode('text')">✏️ Notiz</button>
             <button class="btn" id="toolDelete" onclick="setMode('delete')">🗑️ Löschen</button>
-            <button class="btn" onclick="document.getElementById('imgInput').click()">📷 Foto laden</button>
-            <input type="file" id="imgInput" accept="image/*" style="display:none;" onchange="addPhotoLayer(event)">
+            <button class="btn" onclick="document.getElementById('imgInput').click()">📷 Foto / Kamera</button>
+            <input type="file" id="imgInput" accept="image/*" capture="environment" style="display:none;" onchange="addPhotoLayer(event)">
         </div>
     </main>
 
@@ -119,6 +137,7 @@
     <div class="modal" id="textModal">
         <div class="card">
             <h2>Notiz / Text einfügen</h2>
+            <p style="font-size:0.8rem; color:#aaa; margin-top:4px;">Tippe einen Text ein.</p>
             <div style="margin:16px 0;">
                 <input type="text" id="noteInput" placeholder="z. B. Steckdose, Riss, H=2100">
             </div>
@@ -143,18 +162,23 @@
         let currentStart = null; 
         let currentEnd = null;   
         let isDrawing = false;
-        
+        let lastWallEnd = null; 
+
         let activePhoto = null;
         let isDraggingPhoto = false;
         let isResizingPhoto = false;
         let dragOffset = { x: 0, y: 0 };
 
-        let activeArrowHandle = null; 
+        let activeCornerHandle = null; 
+        let activeArrowHandle = null;  
+        let activeTextHandle = null;  
+        
         let currentPointerPos = null;
         let pendingTextPos = null;
         let selectedTarget = null;
 
         function setMode(newMode) {
+            resetState();
             mode = newMode;
             document.body.classList.toggle('delete-mode', mode === 'delete');
 
@@ -164,7 +188,6 @@
             
             const delBtn = document.getElementById('toolDelete');
             delBtn.classList.toggle('btn-delete-active', mode === 'delete');
-            resetState();
         }
 
         function resetState() {
@@ -173,8 +196,11 @@
             isResizingPhoto = false;
             activePhoto = null;
             activeArrowHandle = null;
+            activeCornerHandle = null;
+            activeTextHandle = null;
             currentStart = null;
             currentEnd = null;
+            lastWallEnd = null;
             redraw();
         }
 
@@ -185,20 +211,16 @@
         }
         window.addEventListener('resize', resizeCanvas);
 
-        // Sicheres Abfragen der Position auf Mac (Maus) und Touchscreen (Finger)
         function getPos(e) {
             const rect = canvas.getBoundingClientRect();
-            let clientX = e.clientX;
-            let clientY = e.clientY;
-
+            let clientX, clientY;
             if (e.touches && e.touches.length > 0) {
                 clientX = e.touches[0].clientX;
                 clientY = e.touches[0].clientY;
-            } else if (e.changedTouches && e.changedTouches.length > 0) {
-                clientX = e.changedTouches[0].clientX;
-                clientY = e.changedTouches[0].clientY;
+            } else {
+                clientX = e.clientX;
+                clientY = e.clientY;
             }
-
             return { x: clientX - rect.left, y: clientY - rect.top };
         }
 
@@ -230,7 +252,21 @@
             e.target.value = '';
         }
 
-        function startDraw(e) {
+        function findWallCornersAt(pos, threshold = 30) {
+            let matches = [];
+            for (let i = 0; i < walls.length; i++) {
+                let w = walls[i];
+                if (Math.hypot(pos.x - w.p1.x, pos.y - w.p1.y) < threshold) {
+                    matches.push({ wallIndex: i, pointName: 'p1', pt: w.p1 });
+                }
+                if (Math.hypot(pos.x - w.p2.x, pos.y - w.p2.y) < threshold) {
+                    matches.push({ wallIndex: i, pointName: 'p2', pt: w.p2 });
+                }
+            }
+            return matches;
+        }
+
+        function handlePointerDown(e) {
             let pos = getPos(e);
             currentPointerPos = pos;
 
@@ -255,17 +291,11 @@
                 return;
             }
 
-            // 1. Pfeil-Anpackpunkte
-            for (let i = arrows.length - 1; i >= 0; i--) {
-                let a = arrows[i];
-                if (Math.hypot(pos.x - a.p1.x, pos.y - a.p1.y) < 25) {
-                    activeArrowHandle = { arrowIndex: i, pointName: 'p1' };
-                    redraw();
-                    return;
-                }
-                if (Math.hypot(pos.x - a.p2.x, pos.y - a.p2.y) < 25) {
-                    activeArrowHandle = { arrowIndex: i, pointName: 'p2' };
-                    redraw();
+            // 1. Notiz verschieben
+            for (let i = textNotes.length - 1; i >= 0; i--) {
+                let t = textNotes[i];
+                if (Math.hypot(pos.x - t.x, pos.y - t.y) < 22) {
+                    activeTextHandle = i;
                     return;
                 }
             }
@@ -273,14 +303,12 @@
             // 2. Foto-Steuerung
             for (let i = photos.length - 1; i >= 0; i--) {
                 let p = photos[i];
-
-                if (Math.hypot(pos.x - (p.x + p.w), pos.y - (p.y + p.h)) < 30) {
+                if (Math.hypot(pos.x - (p.x + p.w), pos.y - (p.y + p.h)) < 25) {
                     activePhoto = p;
                     isResizingPhoto = true;
                     return;
                 }
-
-                if (Math.hypot(pos.x - p.x, pos.y - p.y) < 30) {
+                if (Math.hypot(pos.x - p.x, pos.y - p.y) < 25) {
                     activePhoto = p;
                     isDraggingPhoto = true;
                     dragOffset = { x: pos.x - p.x, y: pos.y - p.y };
@@ -288,18 +316,76 @@
                 }
             }
 
-            // 3. Normales Zeichnen
-            isDrawing = true;
-            if (mode === 'wall') pos = snapToExistingPoints(pos);
-            currentStart = pos;
-            currentEnd = pos;
+            // 3. Pfeil-Anpackpunkte
+            for (let i = arrows.length - 1; i >= 0; i--) {
+                let a = arrows[i];
+                if (Math.hypot(pos.x - a.p1.x, pos.y - a.p1.y) < 20) {
+                    activeArrowHandle = { arrowIndex: i, pointName: 'p1' };
+                    redraw();
+                    return;
+                }
+                if (Math.hypot(pos.x - a.p2.x, pos.y - a.p2.y) < 20) {
+                    activeArrowHandle = { arrowIndex: i, pointName: 'p2' };
+                    redraw();
+                    return;
+                }
+            }
+
+            // 4. Prüfen ob eine bestehende Ecke angeklickt wurde zum Verschieben
+            let corners = findWallCornersAt(pos, 25);
+            if (corners.length > 0 && mode === 'wall') {
+                // Nur wenn man nicht aktiv nahtlos an der letzten Wand ansetzt
+                if (!lastWallEnd || Math.hypot(pos.x - lastWallEnd.x, pos.y - lastWallEnd.y) > 30) {
+                    activeCornerHandle = corners;
+                    return;
+                }
+            }
+
+            // 5. NORMALES ZEICHNEN / NAHTLOS FORTSETZEN
+            if (mode === 'wall' || mode === 'arrow') {
+                isDrawing = true;
+                let startPt = pos;
+
+                if (mode === 'wall') {
+                    if (lastWallEnd && Math.hypot(pos.x - lastWallEnd.x, pos.y - lastWallEnd.y) < 35) {
+                        startPt = lastWallEnd;
+                    } else {
+                        startPt = snapToExistingPoints(pos, 30);
+                    }
+                }
+
+                currentStart = startPt;
+                currentEnd = startPt;
+            }
         }
 
-        function draw(e) {
+        function handlePointerMove(e) {
             let pos = getPos(e);
             currentPointerPos = pos;
 
             if (mode === 'delete') return;
+
+            if (activeTextHandle !== null) {
+                let t = textNotes[activeTextHandle];
+                t.x = pos.x;
+                t.y = pos.y;
+                t.attachedPhotoId = getPhotoIdAt(pos);
+                redraw();
+                updateLabels();
+                return;
+            }
+
+            if (activeCornerHandle) {
+                let snappedPos = snapToExistingPoints(pos, 25, activeCornerHandle[0].pt);
+                activeCornerHandle.forEach(handle => {
+                    let w = walls[handle.wallIndex];
+                    w[handle.pointName] = { x: snappedPos.x, y: snappedPos.y };
+                    w.attachedPhotoId = getPhotoIdAt(snappedPos);
+                });
+                redraw();
+                updateLabels();
+                return;
+            }
 
             if (activeArrowHandle) {
                 let a = arrows[activeArrowHandle.arrowIndex];
@@ -352,14 +438,15 @@
                 return;
             }
 
-            if (!isDrawing) return;
+            if (!isDrawing || !currentStart) return;
 
             if (mode === 'wall') {
                 const dx = Math.abs(pos.x - currentStart.x);
                 const dy = Math.abs(pos.y - currentStart.y);
-                if (dx < 20) pos.x = currentStart.x;
-                if (dy < 20) pos.y = currentStart.y;
-                pos = snapToExistingPoints(pos);
+                if (dx < 18) pos.x = currentStart.x;
+                if (dy < 18) pos.y = currentStart.y;
+
+                pos = snapToExistingPoints(pos, 35);
             }
 
             currentEnd = pos;
@@ -367,9 +454,11 @@
             drawPreviewLine();
         }
 
-        function stopDraw() {
-            if (activeArrowHandle) {
+        function handlePointerUp() {
+            if (activeArrowHandle || activeCornerHandle || activeTextHandle !== null) {
                 activeArrowHandle = null;
+                activeCornerHandle = null;
+                activeTextHandle = null;
                 redraw();
                 return;
             }
@@ -390,13 +479,16 @@
                     const attachedPhotoId = getPhotoIdAt(currentEnd) || getPhotoIdAt(currentStart);
 
                     if (mode === 'wall') {
+                        let finalEnd = snapToExistingPoints(currentEnd, 35);
                         walls.push({ 
-                            p1: currentStart, 
-                            p2: currentEnd, 
+                            p1: { x: currentStart.x, y: currentStart.y }, 
+                            p2: { x: finalEnd.x, y: finalEnd.y }, 
                             length: null, 
                             rawMeasurements: [],
                             attachedPhotoId: attachedPhotoId 
                         });
+
+                        lastWallEnd = finalEnd;
                         updateLabels();
                     } else if (mode === 'arrow') {
                         const newArrowIndex = arrows.length;
@@ -443,24 +535,26 @@
             return null;
         }
 
-        function snapToExistingPoints(pos) {
+        function snapToExistingPoints(pos, threshold = 35, ignorePoint = null) {
             for (let w of walls) {
-                if (Math.hypot(pos.x - w.p1.x, pos.y - w.p1.y) < 15) return { x: w.p1.x, y: w.p1.y };
-                if (Math.hypot(pos.x - w.p2.x, pos.y - w.p2.y) < 15) return { x: w.p2.x, y: w.p2.y };
+                if ((!ignorePoint || Math.hypot(w.p1.x - ignorePoint.x, w.p1.y - ignorePoint.y) > 5) && Math.hypot(pos.x - w.p1.x, pos.y - w.p1.y) < threshold) {
+                    return { x: w.p1.x, y: w.p1.y };
+                }
+                if ((!ignorePoint || Math.hypot(w.p2.x - ignorePoint.x, w.p2.y - ignorePoint.y) > 5) && Math.hypot(pos.x - w.p2.x, pos.y - w.p2.y) < threshold) {
+                    return { x: w.p2.x, y: w.p2.y };
+                }
             }
             return pos;
         }
 
-        // Maus-Events (Mac / Desktop)
-        canvas.addEventListener('mousedown', startDraw);
-        canvas.addEventListener('mousemove', draw);
-        window.addEventListener('mouseup', stopDraw);
+        canvas.addEventListener('mousedown', handlePointerDown);
+        canvas.addEventListener('mousemove', handlePointerMove);
+        canvas.addEventListener('mouseup', handlePointerUp);
 
-        // Touch-Events (Smartphone / Tablet)
-        canvas.addEventListener('touchstart', (e) => { e.preventDefault(); startDraw(e); }, { passive: false });
-        canvas.addEventListener('touchmove', (e) => { e.preventDefault(); draw(e); }, { passive: false });
-        window.addEventListener('touchend', stopDraw);
-        window.addEventListener('touchcancel', stopDraw);
+        canvas.addEventListener('touchstart', (e) => { e.preventDefault(); handlePointerDown(e); }, { passive: false });
+        canvas.addEventListener('touchmove', (e) => { e.preventDefault(); handlePointerMove(e); }, { passive: false });
+        canvas.addEventListener('touchend', (e) => { e.preventDefault(); handlePointerUp(); }, { passive: false });
+        canvas.addEventListener('contextmenu', (e) => e.preventDefault()); // Verhindert Browser-Kontextmenüs
 
         function drawPreviewLine() {
             if (!currentStart || !currentEnd) return;
@@ -473,7 +567,7 @@
             ctx.stroke();
             ctx.setLineDash([]);
 
-            if (mode === 'arrow') drawMagnifier(currentEnd);
+            if (mode === 'arrow' || mode === 'wall') drawMagnifier(currentEnd);
         }
 
         function redraw() {
@@ -517,7 +611,7 @@
 
             drawRightAngleSymbols();
 
-            if (activeArrowHandle && currentPointerPos) {
+            if ((activeArrowHandle || activeCornerHandle) && currentPointerPos) {
                 drawMagnifier(currentPointerPos);
             }
         }
@@ -532,13 +626,6 @@
 
             drawArrowHead(p1, p2);
             drawArrowHead(p2, p1);
-
-            ctx.fillStyle = '#ffffff';
-            ctx.strokeStyle = '#ff4757';
-            ctx.lineWidth = 2;
-
-            ctx.beginPath(); ctx.arc(p1.x, p1.y, 6, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
-            ctx.beginPath(); ctx.arc(p2.x, p2.y, 6, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
         }
 
         function drawArrowHead(from, to) {
@@ -695,7 +782,7 @@
                 textNotes = [];
                 photos = [];
                 labelsLayer.innerHTML = '';
-                redraw();
+                resetState();
             }
         }
 
@@ -831,7 +918,6 @@
             printWindow.document.close();
         }
 
-        // Initiales Anpassen der Canvas-Größe beim ersten Start
         resizeCanvas();
     </script>
 </body>
