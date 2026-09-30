@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Profi Aufmaß Pro - Zoom & Pan</title>
+    <title>Profi Aufmaß Pro - Laser & Zoom</title>
     
     <link rel="manifest" href="manifest.json">
     <script>
@@ -81,6 +81,8 @@
         .btn-success { background: #2ed573; color: #000; }
         .btn-delete-active { background: #ff4757 !important; color: #fff !important; }
         .btn-danger { background: #ff4757; color: #fff; }
+        .btn-laser { background: #ffa502; color: #000; }
+        .btn-laser.connected { background: #2ed573; color: #000; }
 
         .modal { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.8); display: none; justify-content: center; align-items: flex-end; z-index: 100; }
         .modal.active { display: flex; }
@@ -144,6 +146,7 @@
                 <button class="btn active" id="toolWall" onclick="setMode('wall')">🧱 Wand</button>
                 <button class="btn" id="toolArrow" onclick="setMode('arrow')">↔️ Pfeil</button>
                 <button class="btn" id="toolPan" onclick="setMode('pan')">✋ Hand / Zoom</button>
+                <button class="btn btn-laser" id="laserBtn" onclick="connectLaser()">📶 Laser</button>
                 <button class="btn" id="toolText" onclick="setMode('text')">✏️ Notiz</button>
                 <button class="btn" id="toolDelete" onclick="setMode('delete')">🗑️ Löschen</button>
                 <button class="btn" onclick="document.getElementById('imgInput').click()">📷 Foto</button>
@@ -166,7 +169,7 @@
                 <div class="mode-select-btn" id="modeManual" onclick="setMeasureSelectionMode('manual')">🎯 Manuell wählen</div>
             </div>
             <div class="result-box">
-                <div class="result-title">Übertragenes Maß</div>
+                <div class="result-title">Übertragenes Maß <span style="font-size:0.65rem; color:#ffa502;">(Laser bereit)</span></div>
                 <div class="result-value" id="minResult">--- mm</div>
                 <div class="result-warning" id="diffWarning"></div>
             </div>
@@ -220,11 +223,13 @@
         let selectionMode = 'min';
         let manualSelectedIndex = 0;
 
-        // Zoom & Pan Variablen
         let panX = 0, panY = 0;
         let zoom = 1.0;
         let isPanning = false;
         let panStart = { x: 0, y: 0 };
+
+        let bluetoothDevice = null;
+        let laserCharacteristic = null;
         
         let appData = {
             activeProjectId: null,
@@ -267,6 +272,85 @@
         let currentPointerPos = null;
         let pendingTextPos = null;
         let selectedTarget = null;
+
+        async function connectLaser() {
+            try {
+                if (!navigator.bluetooth) {
+                    alert("Web Bluetooth wird von diesem Browser nicht unterstützt.");
+                    return;
+                }
+                const btn = document.getElementById('laserBtn');
+                btn.innerText = "📶 Verbinde...";
+
+                const device = await navigator.bluetooth.requestDevice({
+                    acceptAllDevices: true,
+                    optionalServices: [
+                        '0000ffe0-0000-1000-8000-00805f9b34fb', 
+                        '3ab10100-f831-4395-b29d-570977d5bf94',
+                        '00005301-0000-0041-5253-534f46540000'
+                    ]
+                });
+
+                bluetoothDevice = device;
+                const server = await device.gatt.connect();
+                
+                device.addEventListener('gattserverdisconnected', onLaserDisconnected);
+
+                const services = await server.getPrimaryServices();
+                for (let service of services) {
+                    const characteristics = await service.getCharacteristics();
+                    for (let char of characteristics) {
+                        if (char.properties.notify || char.properties.indicate) {
+                            laserCharacteristic = char;
+                            await char.startNotifications();
+                            char.addEventListener('characteristicvaluechanged', handleLaserValueChange);
+                            
+                            btn.innerText = `📶 Verbunden: ${device.name || 'Laser'}`;
+                            btn.classList.add('connected');
+                            return;
+                        }
+                    }
+                }
+                alert("Laser verbunden, aber keine Mess-Datenkanal gefunden.");
+                btn.innerText = "📶 Laser";
+            } catch (error) {
+                console.error("Bluetooth Fehler:", error);
+                document.getElementById('laserBtn').innerText = "📶 Laser";
+                alert("Verbindung fehlgeschlagen: " + error.message);
+            }
+        }
+
+        function onLaserDisconnected() {
+            const btn = document.getElementById('laserBtn');
+            btn.innerText = "📶 Laser";
+            btn.classList.remove('connected');
+            laserCharacteristic = null;
+            bluetoothDevice = null;
+        }
+
+        function handleLaserValueChange(event) {
+            const value = event.target.value;
+            let parsedVal = 0;
+            
+            try {
+                if (value.byteLength >= 4) {
+                    let mVal = value.getFloat32(0, true);
+                    if (mVal > 0.05 && mVal < 100) parsedVal = Math.round(mVal * 1000); 
+                }
+                if (!parsedVal) {
+                    let text = new TextDecoder().decode(value).trim();
+                    let num = parseFloat(text.replace(',', '.'));
+                    if (!isNaN(num)) parsedVal = num > 10 ? Math.round(num) : Math.round(num * 1000);
+                }
+            } catch(e) { console.error("Parsing Fehler:", e); }
+
+            if (parsedVal > 0) {
+                const modal = document.getElementById('measureModal');
+                if (modal.classList.contains('active')) {
+                    addMeasureRow(parsedVal);
+                }
+            }
+        }
 
         function loadAppData() {
             const saved = localStorage.getItem('aufmass_app_data');
@@ -419,7 +503,6 @@
             document.getElementById('toolPan').classList.toggle('active', mode === 'pan');
             document.getElementById('toolText').classList.toggle('active', mode === 'text');
             document.getElementById('toolDelete').classList.toggle('btn-delete-active', mode === 'delete');
-
             canvas.classList.toggle('pan-cursor', mode === 'pan');
         }
 
@@ -437,7 +520,6 @@
         }
         window.addEventListener('resize', resizeCanvas);
 
-        // Koordinaten mit Berücksichtigung von Zoom und Pan umrechnen
         function getPos(e) {
             const rect = canvas.getBoundingClientRect();
             let clientX = e.touches ? e.touches[0].clientX : e.clientX;
@@ -477,7 +559,6 @@
         function handlePointerDown(e) {
             if (e.target.closest('#labels-layer')) return;
 
-            // Pan-Modus: Canvas verschieben starten
             if (mode === 'pan') {
                 isPanning = true;
                 panStart = { x: (e.touches ? e.touches[0].clientX : e.clientX) - panX, y: (e.touches ? e.touches[0].clientY : e.clientY) - panY };
@@ -609,7 +690,6 @@
             currentStart = null; currentEnd = null; redraw();
         }
 
-        // Mausrad-Zoom
         canvas.addEventListener('wheel', (e) => {
             e.preventDefault();
             const zoomFactor = 1.1;
@@ -618,7 +698,7 @@
             const mouseY = e.clientY - rect.top;
 
             let newZoom = e.deltaY < 0 ? zoom * zoomFactor : zoom / zoomFactor;
-            newZoom = Math.max(0.4, Math.min(5.0, newZoom)); // Begrenzung 40% bis 500%
+            newZoom = Math.max(0.4, Math.min(5.0, newZoom));
 
             panX = mouseX - (mouseX - panX) * (newZoom / zoom);
             panY = mouseY - (mouseY - panY) * (newZoom / zoom);
@@ -667,7 +747,6 @@
             ctx.translate(panX, panY);
             ctx.scale(zoom, zoom);
 
-            // Raster zeichnen
             ctx.strokeStyle = '#1e1e2d'; ctx.lineWidth = 1 / zoom;
             for(let x=-2000; x<4000; x+=30) { ctx.beginPath(); ctx.moveTo(x,-2000); ctx.lineTo(x,4000); ctx.stroke(); }
             for(let y=-2000; y<4000; y+=30) { ctx.beginPath(); ctx.moveTo(-2000,y); ctx.lineTo(4000,y); ctx.stroke(); }
@@ -740,7 +819,6 @@
         }
 
         function drawMagnifier(targetPos) {
-            // Lupe bleibt stabil
             const zoomVal = 2.5, size = 120, radius = size / 2;
             let magX = targetPos.x * zoom + panX, magY = (targetPos.y * zoom + panY) - 100;
             if (magY - radius < 10) magY = (targetPos.y * zoom + panY) + 100;
@@ -763,7 +841,6 @@
             ctx.beginPath(); ctx.arc(magX, magY, radius, 0, Math.PI * 2); ctx.strokeStyle = '#00d2ff'; ctx.lineWidth = 3; ctx.stroke();
         }
 
-        // Labels positionieren sich exakt passend zum Zoom und Pan
         function updateLabels() {
             labelsLayer.innerHTML = '';
             walls.forEach((w, idx) => {
