@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Profi Aufmaß Pro v5.9</title>
+    <title>Profi Aufmaß Pro v6.0</title>
     
     <link rel="manifest" href="manifest.json">
     <script>
@@ -116,7 +116,7 @@
         <header>
             <div class="header-title-wrapper">
                 <h1>Profi Aufmaß Pro</h1>
-                <span class="version-badge">v5.9</span>
+                <span class="version-badge">v6.0</span>
             </div>
             <button class="btn btn-success" onclick="openNewProjectModal()">➕ Neues Projekt</button>
         </header>
@@ -133,7 +133,7 @@
                 <button class="btn" onclick="goToDashboard()" style="padding: 6px 10px;">🏠 Projekte</button>
                 <div class="header-title-wrapper">
                     <h1 id="activeProjectTitle">Projekt</h1>
-                    <span class="version-badge">v5.9</span>
+                    <span class="version-badge">v6.0</span>
                 </div>
             </div>
             <div>
@@ -237,7 +237,7 @@
         let panStart = { x: 0, y: 0 };
 
         let bluetoothDevice = null;
-        let laserWriteCharacteristic = null;
+        let laserCharacteristic = null;
         
         let appData = {
             activeProjectId: null,
@@ -290,46 +290,56 @@
                 const btn = document.getElementById('laserBtn');
                 btn.innerText = "📶 Verbinde...";
 
+                // Bosch GLM spezifische UUIDs für Service und Charakteristik
+                const BOSCH_SERVICE_UUID = '02a6c0d0-0451-4000-b000-fb3210111989';
+                const BOSCH_CHAR_UUID = '02a6c0d1-0451-4000-b000-fb3210111989';
+
                 const device = await navigator.bluetooth.requestDevice({
                     acceptAllDevices: true,
-                    optionalServices: [
-                        '0000ffe0-0000-1000-8000-00805f9b34fb',
-                        '0000180a-0000-1000-8000-00805f9b34fb',
-                        '3ab10100-f831-4395-b29d-570977d5bf94'
-                    ]
+                    optionalServices: [BOSCH_SERVICE_UUID, '0000180a-0000-1000-8000-00805f9b34fb']
                 });
 
                 bluetoothDevice = device;
                 const server = await device.gatt.connect();
                 device.addEventListener('gattserverdisconnected', onLaserDisconnected);
 
-                const services = await server.getPrimaryServices();
-
-                for (let service of services) {
-                    try {
-                        const characteristics = await service.getCharacteristics();
-                        for (let char of characteristics) {
-                            if (char.properties.notify || char.properties.indicate) {
-                                await char.startNotifications();
-                                char.addEventListener('characteristicvaluechanged', handleLaserValueChange);
-                            }
-                            if (char.properties.write || char.properties.writeWithoutResponse) {
-                                laserWriteCharacteristic = char;
-                            }
-                        }
-                    } catch (e) {}
+                // Versuche den speziellen Bosch-Service zu holen
+                let service;
+                try {
+                    service = await server.getPrimaryService(BOSCH_SERVICE_UUID);
+                } catch (e) {
+                    // Fallback: Ersten verfügbaren Service nehmen
+                    const services = await server.getPrimaryServices();
+                    service = services[0];
                 }
 
-                if (laserWriteCharacteristic) {
-                    try {
-                        const encoder = new TextEncoder();
-                        await laserWriteCharacteristic.writeValue(encoder.encode("\n"));
-                    } catch(e) {}
+                let char;
+                try {
+                    char = await service.getCharacteristic(BOSCH_CHAR_UUID);
+                } catch (e) {
+                    const chars = await service.getCharacteristics();
+                    char = chars.find(c => c.properties.notify || c.properties.indicate) || chars[0];
+                }
+
+                if (char) {
+                    laserCharacteristic = char;
+                    await char.startNotifications();
+                    char.addEventListener('characteristicvaluechanged', handleLaserValueChange);
+
+                    // Sync-Befehl an Bosch-Laser senden, um den Datenstrom zu aktivieren ([192, 85, 2, 1, 0, 26])
+                    if (char.properties.write || char.properties.writeWithoutResponse) {
+                        try {
+                            const syncCommand = new Uint8Array([192, 85, 2, 1, 0, 26]);
+                            await char.writeValue(syncCommand);
+                        } catch (err) {
+                            console.log("Sync-Befehl über write, versuche writeValueWithResponse...", err);
+                        }
+                    }
                 }
 
                 btn.innerText = `📶 Verbunden (${device.name || 'Laser'})`;
                 btn.classList.add('connected');
-                document.getElementById('laserStatusText').innerText = "(Laser aktiv & verbunden)";
+                document.getElementById('laserStatusText').innerText = "(Laser aktiv & streamt)";
 
             } catch (error) {
                 console.error("Bluetooth Fehler:", error);
@@ -342,7 +352,7 @@
             const btn = document.getElementById('laserBtn');
             btn.innerText = "📶 Laser";
             btn.classList.remove('connected');
-            laserWriteCharacteristic = null;
+            laserCharacteristic = null;
             bluetoothDevice = null;
             document.getElementById('laserStatusText').innerText = "(Getrennt)";
         }
@@ -352,19 +362,22 @@
             let parsedVal = 0;
             
             try {
-                let text = new TextDecoder().decode(value).trim();
-                console.log("Laser Empfang RAW:", text);
-                
-                let cleanText = text.replace(/[^0-9.,]/g, '').replace(',', '.');
-                let num = parseFloat(cleanText);
-                
-                if (!isNaN(num) && num > 0) {
-                    parsedVal = num < 100 ? Math.round(num * 1000) : Math.round(num);
+                // Bosch GLM sendet Messwerte als Single-precision Float (4 Bytes) ab Byte 7 oder direkt als Float
+                if (value.byteLength >= 11) {
+                    let mVal = value.getFloat32(7, true); // Ab Byte 7 laut Protokoll
+                    if (mVal > 0.05 && mVal < 300) parsedVal = Math.round(mVal * 1000); 
                 }
-
                 if (!parsedVal && value.byteLength >= 4) {
                     let mVal = value.getFloat32(0, true);
-                    if (mVal > 0.05 && mVal < 200) parsedVal = Math.round(mVal * 1000); 
+                    if (mVal > 0.05 && mVal < 300) parsedVal = Math.round(mVal * 1000); 
+                }
+                if (!parsedVal) {
+                    let text = new TextDecoder().decode(value).trim();
+                    let cleanText = text.replace(/[^0-9.,]/g, '').replace(',', '.');
+                    let num = parseFloat(cleanText);
+                    if (!isNaN(num) && num > 0) {
+                        parsedVal = num < 100 ? Math.round(num * 1000) : Math.round(num);
+                    }
                 }
             } catch(e) { console.error("Parsing Fehler:", e); }
 
