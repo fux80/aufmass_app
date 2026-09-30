@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Profi Aufmaß Pro v5.5</title>
+    <title>Profi Aufmaß Pro v5.6</title>
     
     <link rel="manifest" href="manifest.json">
     <script>
@@ -116,7 +116,7 @@
         <header>
             <div class="header-title-wrapper">
                 <h1>Profi Aufmaß Pro</h1>
-                <span class="version-badge">v5.5</span>
+                <span class="version-badge">v5.6</span>
             </div>
             <button class="btn btn-success" onclick="openNewProjectModal()">➕ Neues Projekt</button>
         </header>
@@ -133,7 +133,7 @@
                 <button class="btn" onclick="goToDashboard()" style="padding: 6px 10px;">🏠 Projekte</button>
                 <div class="header-title-wrapper">
                     <h1 id="activeProjectTitle">Projekt</h1>
-                    <span class="version-badge">v5.5</span>
+                    <span class="version-badge">v5.6</span>
                 </div>
             </div>
             <div>
@@ -237,7 +237,7 @@
         let panStart = { x: 0, y: 0 };
 
         let bluetoothDevice = null;
-        let laserCharacteristic = null;
+        let laserCharacteristics = [];
         
         let appData = {
             activeProjectId: null,
@@ -290,40 +290,39 @@
                 const btn = document.getElementById('laserBtn');
                 btn.innerText = "📶 Verbinde...";
 
+                // Bosch Laser gezielt über optionale Services und Standard-Serials erlauben
                 const device = await navigator.bluetooth.requestDevice({
-                    acceptAllDevices: true
+                    acceptAllDevices: true,
+                    optionalServices: [
+                        '0000ffe0-0000-1000-8000-00805f9b34fb',
+                        '0000180a-0000-1000-8000-00805f9b34fb'
+                    ]
                 });
 
                 bluetoothDevice = device;
                 const server = await device.gatt.connect();
-                
                 device.addEventListener('gattserverdisconnected', onLaserDisconnected);
 
-                let services = [];
-                try {
-                    services = await server.getPrimaryServices();
-                } catch (err) {
-                    console.warn("Konnte Services nicht automatisch listen:", err);
-                }
+                const services = await server.getPrimaryServices();
+                let subbedCount = 0;
 
-                let found = false;
                 for (let service of services) {
                     try {
                         const characteristics = await service.getCharacteristics();
                         for (let char of characteristics) {
                             if (char.properties.notify || char.properties.indicate) {
-                                laserCharacteristic = char;
                                 await char.startNotifications();
                                 char.addEventListener('characteristicvaluechanged', handleLaserValueChange);
-                                found = true;
-                                break;
+                                laserCharacteristics.push(char);
+                                subbedCount++;
                             }
                         }
-                    } catch (e) {}
-                    if (found) break;
+                    } catch (e) {
+                        console.warn("Service übersprungen", e);
+                    }
                 }
 
-                btn.innerText = `📶 Verbunden: ${device.name || 'Laser'}`;
+                btn.innerText = `📶 Verbunden (${subbedCount})`;
                 btn.classList.add('connected');
 
             } catch (error) {
@@ -337,7 +336,7 @@
             const btn = document.getElementById('laserBtn');
             btn.innerText = "📶 Laser";
             btn.classList.remove('connected');
-            laserCharacteristic = null;
+            laserCharacteristics = [];
             bluetoothDevice = null;
         }
 
@@ -346,12 +345,20 @@
             let parsedVal = 0;
             
             try {
+                // Debug-Ausgabe in der Konsole zur Kontrolle, was der GLM sendet
+                console.log("Bluetooth Daten empfangen (ByteLength):", value.byteLength);
+
                 if (value.byteLength >= 4) {
                     let mVal = value.getFloat32(0, true);
-                    if (mVal > 0.05 && mVal < 100) parsedVal = Math.round(mVal * 1000); 
+                    if (mVal > 0.05 && mVal < 200) parsedVal = Math.round(mVal * 1000); 
+                }
+                if (!parsedVal && value.byteLength >= 2) {
+                    let intVal = value.getUint16(0, true);
+                    if (intVal > 50 && intVal < 200000) parsedVal = intVal;
                 }
                 if (!parsedVal) {
                     let text = new TextDecoder().decode(value).trim();
+                    console.log("Als Text decodiert:", text);
                     let num = parseFloat(text.replace(',', '.'));
                     if (!isNaN(num)) parsedVal = num > 10 ? Math.round(num) : Math.round(num * 1000);
                 }
