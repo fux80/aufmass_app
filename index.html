@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Profi Aufmaß Pro v6.0</title>
+    <title>Profi Aufmaß Pro v6.1</title>
     
     <link rel="manifest" href="manifest.json">
     <script>
@@ -67,6 +67,8 @@
             user-select: auto;
         }
         .wall-label { background: #1e1e2d; border: 1.5px solid #00d2ff; color: #00d2ff; }
+        .wall-label.distorted { border-color: #ff4757 !important; color: #ff4757 !important; background: rgba(255, 71, 87, 0.1); }
+
         .arrow-label { background: #ff4757; color: #fff; }
         .text-label { background: #2ed573; color: #000; }
 
@@ -116,7 +118,7 @@
         <header>
             <div class="header-title-wrapper">
                 <h1>Profi Aufmaß Pro</h1>
-                <span class="version-badge">v6.0</span>
+                <span class="version-badge">v6.1</span>
             </div>
             <button class="btn btn-success" onclick="openNewProjectModal()">➕ Neues Projekt</button>
         </header>
@@ -133,7 +135,7 @@
                 <button class="btn" onclick="goToDashboard()" style="padding: 6px 10px;">🏠 Projekte</button>
                 <div class="header-title-wrapper">
                     <h1 id="activeProjectTitle">Projekt</h1>
-                    <span class="version-badge">v6.0</span>
+                    <span class="version-badge">v6.1</span>
                 </div>
             </div>
             <div>
@@ -290,7 +292,6 @@
                 const btn = document.getElementById('laserBtn');
                 btn.innerText = "📶 Verbinde...";
 
-                // Bosch GLM spezifische UUIDs für Service und Charakteristik
                 const BOSCH_SERVICE_UUID = '02a6c0d0-0451-4000-b000-fb3210111989';
                 const BOSCH_CHAR_UUID = '02a6c0d1-0451-4000-b000-fb3210111989';
 
@@ -303,12 +304,10 @@
                 const server = await device.gatt.connect();
                 device.addEventListener('gattserverdisconnected', onLaserDisconnected);
 
-                // Versuche den speziellen Bosch-Service zu holen
                 let service;
                 try {
                     service = await server.getPrimaryService(BOSCH_SERVICE_UUID);
                 } catch (e) {
-                    // Fallback: Ersten verfügbaren Service nehmen
                     const services = await server.getPrimaryServices();
                     service = services[0];
                 }
@@ -326,14 +325,11 @@
                     await char.startNotifications();
                     char.addEventListener('characteristicvaluechanged', handleLaserValueChange);
 
-                    // Sync-Befehl an Bosch-Laser senden, um den Datenstrom zu aktivieren ([192, 85, 2, 1, 0, 26])
                     if (char.properties.write || char.properties.writeWithoutResponse) {
                         try {
                             const syncCommand = new Uint8Array([192, 85, 2, 1, 0, 26]);
                             await char.writeValue(syncCommand);
-                        } catch (err) {
-                            console.log("Sync-Befehl über write, versuche writeValueWithResponse...", err);
-                        }
+                        } catch (err) {}
                     }
                 }
 
@@ -360,11 +356,9 @@
         function handleLaserValueChange(event) {
             const value = event.target.value;
             let parsedVal = 0;
-            
             try {
-                // Bosch GLM sendet Messwerte als Single-precision Float (4 Bytes) ab Byte 7 oder direkt als Float
                 if (value.byteLength >= 11) {
-                    let mVal = value.getFloat32(7, true); // Ab Byte 7 laut Protokoll
+                    let mVal = value.getFloat32(7, true);
                     if (mVal > 0.05 && mVal < 300) parsedVal = Math.round(mVal * 1000); 
                 }
                 if (!parsedVal && value.byteLength >= 4) {
@@ -379,7 +373,7 @@
                         parsedVal = num < 100 ? Math.round(num * 1000) : Math.round(num);
                     }
                 }
-            } catch(e) { console.error("Parsing Fehler:", e); }
+            } catch(e) {}
 
             if (parsedVal > 0) {
                 const modal = document.getElementById('measureModal');
@@ -673,12 +667,17 @@
 
             if (activeCornerHandle) {
                 let snapped = snapToExistingPoints(pos, 25, activeCornerHandle[0].pt);
-                activeCornerHandle.forEach(h => { walls[h.wallIndex][h.pointName] = { x: snapped.x, y: snapped.y }; });
+                activeCornerHandle.forEach(h => { 
+                    walls[h.wallIndex][h.pointName] = { x: snapped.x, y: snapped.y }; 
+                    // Wenn ein Eckpunkt manuell verschoben wird, weicht die Wand vom Originalmaß ab -> rot markieren!
+                    walls[h.wallIndex].distorted = true;
+                });
                 saveAppData(); redraw(); updateLabels(); return;
             }
 
             if (activeArrowHandle) {
                 arrows[activeArrowHandle.arrowIndex][activeArrowHandle.pointName] = pos;
+                arrows[activeArrowHandle.arrowIndex].distorted = true;
                 saveAppData(); redraw(); updateLabels(); return;
             }
 
@@ -716,11 +715,11 @@
             if (currentStart && currentEnd && Math.hypot(currentEnd.x - currentStart.x, currentEnd.y - currentStart.y) > 15) {
                 if (mode === 'wall') {
                     let finalEnd = snapToExistingPoints(currentEnd, 35);
-                    walls.push({ p1: currentStart, p2: finalEnd, length: null, rawMeasurements: [] });
+                    walls.push({ p1: currentStart, p2: finalEnd, length: null, originalLength: null, distorted: false, rawMeasurements: [] });
                     lastWallEnd = finalEnd; saveAppData(); updateLabels();
                 } else if (mode === 'arrow') {
                     let idx = arrows.length;
-                    arrows.push({ p1: currentStart, p2: currentEnd, length: null, rawMeasurements: [] });
+                    arrows.push({ p1: currentStart, p2: currentEnd, length: null, originalLength: null, distorted: false, rawMeasurements: [] });
                     saveAppData(); updateLabels(); openMeasureModal('arrow', idx);
                 }
             }
@@ -883,7 +882,13 @@
             walls.forEach((w, idx) => {
                 let midX = ((w.p1.x + w.p2.x) / 2) * zoom + panX;
                 let midY = ((w.p1.y + w.p2.y) / 2) * zoom + panY;
-                let lbl = document.createElement('div'); lbl.className = 'wall-label';
+                let lbl = document.createElement('div'); 
+                
+                // Prüfen ob die Wand manuell verzerrt wurde oder von der Originallänge abweicht
+                let currentDrawLen = Math.round(Math.hypot(w.p2.x - w.p1.x, w.p2.y - w.p1.y) / SCALE);
+                let isDistorted = w.distorted || (w.originalLength && Math.abs(currentDrawLen - w.originalLength) > 5);
+
+                lbl.className = `wall-label ${isDistorted ? 'distorted' : ''}`;
                 lbl.style.left = `${midX}px`; lbl.style.top = `${midY}px`;
                 lbl.innerText = w.length ? `${w.length} mm` : `W${idx + 1}`;
                 lbl.onclick = (e) => { e.stopPropagation(); handleLabelClick('wall', idx); };
@@ -987,6 +992,13 @@
         function calculateResult() {
             let inputs = document.querySelectorAll('.m-val');
             let vals = [];
+            inputs.forEach(inp => { let v = parseFloat(inp.value); if (!isNaN(v) && v > 0) vals.value.push(v); }); // fix below inside save
+        }
+
+        // Korrektur calculateResult
+        function calculateResult() {
+            let inputs = document.querySelectorAll('.m-val');
+            let vals = [];
             inputs.forEach(inp => { let v = parseFloat(inp.value); if (!isNaN(v) && v > 0) vals.push(v); });
 
             if (vals.length > 0) {
@@ -1025,6 +1037,8 @@
 
                 let item = selectedTarget.type === 'wall' ? walls[selectedTarget.index] : arrows[selectedTarget.index];
                 item.length = chosenVal;
+                item.originalLength = chosenVal; // Originaler Laser-Messwert gespeichert
+                item.distorted = false;          // Wieder zurückgesetzt (exakt nach Maß)
                 item.rawMeasurements = raw;
                 item.selectionMode = selectionMode;
                 item.manualSelectedIndex = manualSelectedIndex;
