@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Profi Aufmaß Pro v5.7</title>
+    <title>Profi Aufmaß Pro v5.8</title>
     
     <link rel="manifest" href="manifest.json">
     <script>
@@ -99,10 +99,6 @@
             -webkit-user-select: auto; user-select: auto;
         }
 
-        .quick-pad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-top: 8px; }
-        .quick-btn { background: #2a2a3d; color: #00d2ff; border: 1px solid #33334d; padding: 10px; border-radius: 6px; font-weight: bold; cursor: pointer; text-align: center; font-size: 0.9rem; }
-        .quick-btn:active { background: #00d2ff; color: #000; }
-
         .mode-select-group { display: flex; gap: 6px; margin-top: 10px; }
         .mode-select-btn { flex: 1; background: #2a2a3d; color: #aaa; border: 1px solid #33334d; padding: 8px; border-radius: 6px; font-size: 0.75rem; font-weight: bold; cursor: pointer; text-align: center; }
         .mode-select-btn.active { background: #00d2ff; color: #000; border-color: #00d2ff; }
@@ -120,7 +116,7 @@
         <header>
             <div class="header-title-wrapper">
                 <h1>Profi Aufmaß Pro</h1>
-                <span class="version-badge">v5.7</span>
+                <span class="version-badge">v5.8</span>
             </div>
             <button class="btn btn-success" onclick="openNewProjectModal()">➕ Neues Projekt</button>
         </header>
@@ -137,7 +133,7 @@
                 <button class="btn" onclick="goToDashboard()" style="padding: 6px 10px;">🏠 Projekte</button>
                 <div class="header-title-wrapper">
                     <h1 id="activeProjectTitle">Projekt</h1>
-                    <span class="version-badge">v5.7</span>
+                    <span class="version-badge">v5.8</span>
                 </div>
             </div>
             <div>
@@ -175,30 +171,13 @@
                 <button class="btn active" onclick="addMeasureRow()" style="padding: 6px 12px;">➕ Feld</button>
             </div>
             <div class="measure-list" id="measureListContainer"></div>
-            
-            <!-- Schnelleingabe Tastenfeld für Laser-Werte -->
-            <div class="quick-pad">
-                <div class="quick-btn" onclick="appendDigit('1')">1</div>
-                <div class="quick-btn" onclick="appendDigit('2')">2</div>
-                <div class="quick-btn" onclick="appendDigit('3')">3</div>
-                <div class="quick-btn" onclick="appendDigit('4')">4</div>
-                <div class="quick-btn" onclick="appendDigit('5')">5</div>
-                <div class="quick-btn" onclick="appendDigit('6')">6</div>
-                <div class="quick-btn" onclick="appendDigit('7')">7</div>
-                <div class="quick-btn" onclick="appendDigit('8')">8</div>
-                <div class="quick-btn" onclick="appendDigit('9')">9</div>
-                <div class="quick-btn" onclick="appendDigit('0')">0</div>
-                <div class="quick-btn" onclick="appendDigit('00')">00</div>
-                <div class="quick-btn" style="color:#ff4757;" onclick="backspaceDigit()">⌫</div>
-            </div>
-
-            <div class="mode-select-group" style="margin-top:10px;">
+            <div class="mode-select-group">
                 <div class="mode-select-btn active" id="modeMin" onclick="setMeasureSelectionMode('min')">📉 Kleinstes Maß</div>
                 <div class="mode-select-btn" id="modeMax" onclick="setMeasureSelectionMode('max')">📈 Größtes Maß</div>
                 <div class="mode-select-btn" id="modeManual" onclick="setMeasureSelectionMode('manual')">🎯 Manuell wählen</div>
             </div>
             <div class="result-box">
-                <div class="result-title">Übertragenes Maß</div>
+                <div class="result-title">Übertragenes Maß <span style="font-size:0.65rem; color:#2ed573;" id="laserStatusText">(Laser bereit)</span></div>
                 <div class="result-value" id="minResult">--- mm</div>
                 <div class="result-warning" id="diffWarning"></div>
             </div>
@@ -258,7 +237,7 @@
         let panStart = { x: 0, y: 0 };
 
         let bluetoothDevice = null;
-        let laserCharacteristics = [];
+        let laserWriteCharacteristic = null;
         
         let appData = {
             activeProjectId: null,
@@ -316,7 +295,8 @@
                     optionalServices: [
                         '0000ffe0-0000-1000-8000-00805f9b34fb',
                         '0000180a-0000-1000-8000-00805f9b34fb',
-                        '3ab10100-f831-4395-b29d-570977d5bf94'
+                        '3ab10100-f831-4395-b29d-570977d5bf94',
+                        '2a00'
                     ]
                 });
 
@@ -325,7 +305,7 @@
                 device.addEventListener('gattserverdisconnected', onLaserDisconnected);
 
                 const services = await server.getPrimaryServices();
-                let subbedCount = 0;
+                let foundNotify = false;
 
                 for (let service of services) {
                     try {
@@ -334,15 +314,27 @@
                             if (char.properties.notify || char.properties.indicate) {
                                 await char.startNotifications();
                                 char.addEventListener('characteristicvaluechanged', handleLaserValueChange);
-                                laserCharacteristics.push(char);
-                                subbedCount++;
+                                foundNotify = true;
+                            }
+                            if (char.properties.write || char.properties.writeWithoutResponse) {
+                                laserWriteCharacteristic = char;
                             }
                         }
                     } catch (e) {}
                 }
 
+                // Bosch Laser initialisieren, damit er Daten streamt
+                if (laserWriteCharacteristic) {
+                    try {
+                        // Init-Befehl für viele GLM Laser senden (z.B. Stream aktivieren)
+                        const encoder = new TextEncoder();
+                        await laserWriteCharacteristic.writeValue(encoder.encode("\n"));
+                    } catch(e) {}
+                }
+
                 btn.innerText = `📶 Verbunden (${device.name || 'Laser'})`;
                 btn.classList.add('connected');
+                document.getElementById('laserStatusText').innerText = "(Laser aktiv & verbunden)";
 
             } catch (error) {
                 console.error("Bluetooth Fehler:", error);
@@ -355,53 +347,41 @@
             const btn = document.getElementById('laserBtn');
             btn.innerText = "📶 Laser";
             btn.classList.remove('connected');
-            laserCharacteristics = [];
+            laserWriteCharacteristic = null;
             bluetoothDevice = null;
+            document.getElementById('laserStatusText').innerText = "(Getrennt)";
         }
 
         function handleLaserValueChange(event) {
             const value = event.target.value;
             let parsedVal = 0;
+            
             try {
-                if (value.byteLength >= 4) {
+                // Rohdaten als Text dekodieren (Bosch GLM sendet meist ASCII-Strings wie "1234" oder "1.234")
+                let text = new TextDecoder().decode(value).trim();
+                console.log("Laser Empfang RAW:", text);
+                
+                // Versuche direkte Zahl zu parsen
+                let cleanText = text.replace(/[^0-9.,]/g, '').replace(',', '.');
+                let num = parseFloat(cleanText);
+                
+                if (!isNaN(num) && num > 0) {
+                    // Wenn der Wert in Metern kommt (z.B. 1.234), in mm umwandeln (1234)
+                    parsedVal = num < 100 ? Math.round(num * 1000) : Math.round(num);
+                }
+
+                // Fallback Binär (Little Endian Float32 oder Uint16)
+                if (!parsedVal && value.byteLength >= 4) {
                     let mVal = value.getFloat32(0, true);
                     if (mVal > 0.05 && mVal < 200) parsedVal = Math.round(mVal * 1000); 
                 }
-                if (!parsedVal && value.byteLength >= 2) {
-                    let intVal = value.getUint16(0, true);
-                    if (intVal > 50 && intVal < 200000) parsedVal = intVal;
-                }
-                if (!parsedVal) {
-                    let text = new TextDecoder().decode(value).trim();
-                    let num = parseFloat(text.replace(',', '.'));
-                    if (!isNaN(num)) parsedVal = num > 10 ? Math.round(num) : Math.round(num * 1000);
-                }
-            } catch(e) {}
+            } catch(e) { console.error("Parsing Fehler:", e); }
 
             if (parsedVal > 0) {
                 const modal = document.getElementById('measureModal');
                 if (modal.classList.contains('active')) {
                     addMeasureRow(parsedVal);
                 }
-            }
-        }
-
-        function appendDigit(digit) {
-            let activeInput = document.activeElement;
-            if (!activeInput || !activeInput.classList.contains('m-val')) {
-                let inputs = document.querySelectorAll('.m-val');
-                if (inputs.length > 0) activeInput = inputs[inputs.length - 1];
-                else { addMeasureRow(); activeInput = document.querySelectorAll('.m-val')[0]; }
-            }
-            activeInput.value += digit;
-            calculateResult();
-        }
-
-        function backspaceDigit() {
-            let activeInput = document.activeElement;
-            if (activeInput && activeInput.classList.contains('m-val')) {
-                activeInput.value = activeInput.value.slice(0, -1);
-                calculateResult();
             }
         }
 
@@ -1051,7 +1031,6 @@
                     let targetPx = chosenVal * SCALE;
                     item.p2 = { x: item.p1.x + Math.cos(angle) * targetPx, y: item.p1.y + Math.sin(angle) * targetPx };
                     let dx = item.p2.x - oldP2.x, dy = item.p2.y - oldP2.y;
-                    walls.walls = walls; // safety
                     walls.forEach((w, idx) => {
                         if (idx !== selectedTarget.index) {
                             if (Math.hypot(w.p1.x - oldP2.x, w.p1.y - oldP2.y) < 3) w.p1 = { x: w.p1.x + dx, y: w.p1.y + dy };
