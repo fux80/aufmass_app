@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Profi Aufmaß Pro v5.8</title>
+    <title>Profi Aufmaß Pro v5.9</title>
     
     <link rel="manifest" href="manifest.json">
     <script>
@@ -116,7 +116,7 @@
         <header>
             <div class="header-title-wrapper">
                 <h1>Profi Aufmaß Pro</h1>
-                <span class="version-badge">v5.8</span>
+                <span class="version-badge">v5.9</span>
             </div>
             <button class="btn btn-success" onclick="openNewProjectModal()">➕ Neues Projekt</button>
         </header>
@@ -133,7 +133,7 @@
                 <button class="btn" onclick="goToDashboard()" style="padding: 6px 10px;">🏠 Projekte</button>
                 <div class="header-title-wrapper">
                     <h1 id="activeProjectTitle">Projekt</h1>
-                    <span class="version-badge">v5.8</span>
+                    <span class="version-badge">v5.9</span>
                 </div>
             </div>
             <div>
@@ -295,8 +295,7 @@
                     optionalServices: [
                         '0000ffe0-0000-1000-8000-00805f9b34fb',
                         '0000180a-0000-1000-8000-00805f9b34fb',
-                        '3ab10100-f831-4395-b29d-570977d5bf94',
-                        '2a00'
+                        '3ab10100-f831-4395-b29d-570977d5bf94'
                     ]
                 });
 
@@ -305,7 +304,6 @@
                 device.addEventListener('gattserverdisconnected', onLaserDisconnected);
 
                 const services = await server.getPrimaryServices();
-                let foundNotify = false;
 
                 for (let service of services) {
                     try {
@@ -314,7 +312,6 @@
                             if (char.properties.notify || char.properties.indicate) {
                                 await char.startNotifications();
                                 char.addEventListener('characteristicvaluechanged', handleLaserValueChange);
-                                foundNotify = true;
                             }
                             if (char.properties.write || char.properties.writeWithoutResponse) {
                                 laserWriteCharacteristic = char;
@@ -323,10 +320,8 @@
                     } catch (e) {}
                 }
 
-                // Bosch Laser initialisieren, damit er Daten streamt
                 if (laserWriteCharacteristic) {
                     try {
-                        // Init-Befehl für viele GLM Laser senden (z.B. Stream aktivieren)
                         const encoder = new TextEncoder();
                         await laserWriteCharacteristic.writeValue(encoder.encode("\n"));
                     } catch(e) {}
@@ -357,20 +352,16 @@
             let parsedVal = 0;
             
             try {
-                // Rohdaten als Text dekodieren (Bosch GLM sendet meist ASCII-Strings wie "1234" oder "1.234")
                 let text = new TextDecoder().decode(value).trim();
                 console.log("Laser Empfang RAW:", text);
                 
-                // Versuche direkte Zahl zu parsen
                 let cleanText = text.replace(/[^0-9.,]/g, '').replace(',', '.');
                 let num = parseFloat(cleanText);
                 
                 if (!isNaN(num) && num > 0) {
-                    // Wenn der Wert in Metern kommt (z.B. 1.234), in mm umwandeln (1234)
                     parsedVal = num < 100 ? Math.round(num * 1000) : Math.round(num);
                 }
 
-                // Fallback Binär (Little Endian Float32 oder Uint16)
                 if (!parsedVal && value.byteLength >= 4) {
                     let mVal = value.getFloat32(0, true);
                     if (mVal > 0.05 && mVal < 200) parsedVal = Math.round(mVal * 1000); 
