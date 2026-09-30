@@ -283,12 +283,7 @@
                 btn.innerText = "📶 Verbinde...";
 
                 const device = await navigator.bluetooth.requestDevice({
-                    acceptAllDevices: true,
-                    optionalServices: [
-                        '0000ffe0-0000-1000-8000-00805f9b34fb', 
-                        '3ab10100-f831-4395-b29d-570977d5bf94',
-                        '00005301-0000-0041-5253-534f46540000'
-                    ]
+                    acceptAllDevices: true
                 });
 
                 bluetoothDevice = device;
@@ -297,6 +292,8 @@
                 device.addEventListener('gattserverdisconnected', onLaserDisconnected);
 
                 const services = await server.getPrimaryServices();
+                let found = false;
+
                 for (let service of services) {
                     const characteristics = await service.getCharacteristics();
                     for (let char of characteristics) {
@@ -304,15 +301,20 @@
                             laserCharacteristic = char;
                             await char.startNotifications();
                             char.addEventListener('characteristicvaluechanged', handleLaserValueChange);
-                            
-                            btn.innerText = `📶 Verbunden: ${device.name || 'Laser'}`;
-                            btn.classList.add('connected');
-                            return;
+                            found = true;
+                            break;
                         }
                     }
+                    if (found) break;
                 }
-                alert("Laser verbunden, aber keine Mess-Datenkanal gefunden.");
-                btn.innerText = "📶 Laser";
+
+                if (found) {
+                    btn.innerText = `📶 Verbunden: ${device.name || 'Laser'}`;
+                    btn.classList.add('connected');
+                } else {
+                    alert("Gerät verbunden, aber kein Datenkanal (Notify) gefunden.");
+                    btn.innerText = "📶 Laser";
+                }
             } catch (error) {
                 console.error("Bluetooth Fehler:", error);
                 document.getElementById('laserBtn').innerText = "📶 Laser";
