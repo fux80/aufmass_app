@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Profi Aufmaß Pro - Laser & Zoom</title>
+    <title>Profi Aufmaß Pro v5.5</title>
     
     <link rel="manifest" href="manifest.json">
     <script>
@@ -24,7 +24,9 @@
         }
         body { background: #121218; color: #f0f0f0; display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
         header { background: #1e1e2d; padding: 12px 16px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #33334d; z-index: 50; }
+        .header-title-wrapper { display: flex; align-items: baseline; gap: 8px; }
         h1 { font-size: 1.1rem; color: #00d2ff; }
+        .version-badge { font-size: 0.7rem; color: #888; background: #2a2a3d; padding: 2px 6px; border-radius: 4px; }
 
         .view-section { display: none; flex: 1; flex-direction: column; overflow: hidden; }
         .view-section.active { display: flex; }
@@ -112,7 +114,10 @@
     <!-- Dashboard Ansicht -->
     <div id="dashboardView" class="view-section active">
         <header>
-            <h1>Profi Aufmaß Pro - Projekte</h1>
+            <div class="header-title-wrapper">
+                <h1>Profi Aufmaß Pro</h1>
+                <span class="version-badge">v5.5</span>
+            </div>
             <button class="btn btn-success" onclick="openNewProjectModal()">➕ Neues Projekt</button>
         </header>
         <div class="dashboard-container">
@@ -126,7 +131,10 @@
         <header>
             <div style="display: flex; align-items: center; gap: 10px;">
                 <button class="btn" onclick="goToDashboard()" style="padding: 6px 10px;">🏠 Projekte</button>
-                <h1 id="activeProjectTitle">Projekt</h1>
+                <div class="header-title-wrapper">
+                    <h1 id="activeProjectTitle">Projekt</h1>
+                    <span class="version-badge">v5.5</span>
+                </div>
             </div>
             <div>
                 <button class="btn btn-success" onclick="exportPDF()">📄 PDF Export</button>
@@ -291,30 +299,33 @@
                 
                 device.addEventListener('gattserverdisconnected', onLaserDisconnected);
 
-                const services = await server.getPrimaryServices();
-                let found = false;
+                let services = [];
+                try {
+                    services = await server.getPrimaryServices();
+                } catch (err) {
+                    console.warn("Konnte Services nicht automatisch listen:", err);
+                }
 
+                let found = false;
                 for (let service of services) {
-                    const characteristics = await service.getCharacteristics();
-                    for (let char of characteristics) {
-                        if (char.properties.notify || char.properties.indicate) {
-                            laserCharacteristic = char;
-                            await char.startNotifications();
-                            char.addEventListener('characteristicvaluechanged', handleLaserValueChange);
-                            found = true;
-                            break;
+                    try {
+                        const characteristics = await service.getCharacteristics();
+                        for (let char of characteristics) {
+                            if (char.properties.notify || char.properties.indicate) {
+                                laserCharacteristic = char;
+                                await char.startNotifications();
+                                char.addEventListener('characteristicvaluechanged', handleLaserValueChange);
+                                found = true;
+                                break;
+                            }
                         }
-                    }
+                    } catch (e) {}
                     if (found) break;
                 }
 
-                if (found) {
-                    btn.innerText = `📶 Verbunden: ${device.name || 'Laser'}`;
-                    btn.classList.add('connected');
-                } else {
-                    alert("Gerät verbunden, aber kein Datenkanal (Notify) gefunden.");
-                    btn.innerText = "📶 Laser";
-                }
+                btn.innerText = `📶 Verbunden: ${device.name || 'Laser'}`;
+                btn.classList.add('connected');
+
             } catch (error) {
                 console.error("Bluetooth Fehler:", error);
                 document.getElementById('laserBtn').innerText = "📶 Laser";
